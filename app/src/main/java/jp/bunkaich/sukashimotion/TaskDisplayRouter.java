@@ -91,7 +91,8 @@ final class TaskDisplayRouter {
         // Recents restarts the existing task on its destination. A bare reparent left it undrawn
         // on this Fold7. The framework still checks launch/display and task restrictions.
         Bundle options=ActivityOptions.makeBasic().setLaunchDisplayId(destination).toBundle();
-        api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,id,options);
+        int launchResult=(int)api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,id,options);
+        if(launchResult<0)throw new IllegalStateException("@folduo/err_launch_unconfirmed");
         lastDestination=destination;movedTasks.add(id);result.putBoolean("ok",true);result.putBoolean("moved",true);result.putInt("taskId",id);return result;
     }
     synchronized ArrayList<Bundle> recentApps(android.content.Context context)throws Exception{
@@ -116,7 +117,9 @@ final class TaskDisplayRouter {
     synchronized void selectRecent(int taskId,int display)throws Exception{
         Object slice=api.getMethod("getRecentTasks",int.class,int.class,int.class).invoke(manager,64,2,android.os.Process.myUid()/100000);
         for(Object task:(List<?>)slice.getClass().getMethod("getList").invoke(slice))if(number(task,"taskId")==taskId&&standard(task)){
-            api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,taskId,ActivityOptions.makeBasic().setLaunchDisplayId(display).toBundle());lastDestination=display;movedTasks.add(taskId);focusTop(display);return;
+            int launchResult=(int)api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,taskId,ActivityOptions.makeBasic().setLaunchDisplayId(display).toBundle());
+            if(launchResult<0)throw new IllegalStateException("@folduo/err_launch_unconfirmed");
+            lastDestination=display;movedTasks.add(taskId);focusTop(display);return;
         }
         throw new IllegalStateException("@folduo/err_app_finished");
     }
@@ -232,7 +235,10 @@ final class TaskDisplayRouter {
         int active=top!=null&&standard(top)?number(top,"taskId"):-1;
         // Return the current app first. Do not sweep unrelated HOME roots or change
         // which unrelated application was selected after the fold.
-        if(active>=0)api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,active,ActivityOptions.makeBasic().setLaunchDisplayId(0).toBundle());
+        if(active>=0){
+            int launchResult=(int)api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,active,ActivityOptions.makeBasic().setLaunchDisplayId(0).toBundle());
+            if(launchResult<0)throw new IllegalStateException("@folduo/err_launch_unconfirmed");
+        }
         else if(top!=null&&activityType(top)==2)moveHomeTask(top,0);
         for(Object root:roots(1))if(standard(root)&&movedTasks.contains(number(root,"taskId"))&&number(root,"taskId")!=active)
             api.getMethod("moveRootTaskToDisplayOnTopOrBottom",int.class,int.class,boolean.class).invoke(manager,number(root,"taskId"),0,false);

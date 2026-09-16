@@ -63,7 +63,7 @@ public final class MainActivity extends Activity {
     private void startMotion(){
         if(!Settings.canDrawOverlays(this)){Toast.makeText(this,getString(R.string.need_overlay),Toast.LENGTH_LONG).show();return;}
         if(!BridgeConnection.permitted()){Toast.makeText(this,getString(R.string.need_shizuku),Toast.LENGTH_LONG).show();return;}
-        if(!"SM-F966Z".equals(Build.MODEL)){Toast.makeText(this,getString(R.string.unsupported_device),Toast.LENGTH_LONG).show();return;}
+        if(!DeviceProfile.supports(Build.MANUFACTURER,Build.MODEL,Build.VERSION.SDK_INT)){Toast.makeText(this,getString(R.string.unsupported_device),Toast.LENGTH_LONG).show();return;}
         if(checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},8);
         BridgeConnection.connect(this);MotionSettings.setEnabled(this,true);startForegroundService(new Intent(this,MotionService.class).setAction(MotionService.running?"restart":"start"));
         Toast.makeText(this,getString(R.string.close_to_prepare),Toast.LENGTH_LONG).show();finish();
@@ -84,7 +84,8 @@ public final class MainActivity extends Activity {
         }catch(Exception e){handler.post(()->{probing=false;diagnostic.setText(UiText.error(e).resolve(this));});}});
     }
     static String formatReport(Context c,Bundle b){
-        StringBuilder text=new StringBuilder(c.getString(R.string.probe_permissions,b.getInt("uid"),c.getString(b.getBoolean("samsungPermission")?R.string.yes:R.string.no)));
+        StringBuilder text=new StringBuilder(c.getString(R.string.device_report,b.getString("model","?"),b.getInt("sdk"),b.getString("build","?")));
+        text.append('\n').append(c.getString(R.string.probe_permissions,b.getInt("uid"),c.getString(b.getBoolean("samsungPermission")?R.string.yes:R.string.no)));
         ArrayList<Bundle> rows=b.getParcelableArrayList("sensors",Bundle.class);boolean gyro=false,sub=false;
         if(rows!=null)for(Bundle r:rows){
             long count=r.getLong("events");int type=r.getInt("type");

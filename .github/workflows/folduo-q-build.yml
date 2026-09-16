@@ -1,0 +1,61 @@
+name: Folduo Q experimental build
+on:
+  push:
+    branches: ["codex/folduo-sm-f966q"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
+      - name: Unit tests, lint and APK
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+      - name: Build wallpaper helper
+        run: |
+          python3 -m py_compile tools/cover-wallpaper.py tools/build-wallpaper-helper.py
+          python3 tools/build-wallpaper-helper.py
+      - name: Package
+        run: |
+          mkdir -p dist/wallpaper
+          cp app/build/outputs/apk/release/app-release.apk dist/Folduo-0.1.21-q1.apk
+          cp tools/cover-wallpaper.py tools/cover-wallpaper-setup.jar LICENSE dist/wallpaper/
+          cp README.SM-F966Q.md dist/
+          cd dist
+          zip -r folduo-wallpaper-setup-q1.zip wallpaper
+          sha256sum Folduo-0.1.21-q1.apk folduo-wallpaper-setup-q1.zip > SHA256SUMS
+      - name: Save test build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Folduo-SM-F966Q-experimental
+          path: |
+            dist/Folduo-0.1.21-q1.apk
+            dist/folduo-wallpaper-setup-q1.zip
+            dist/README.SM-F966Q.md
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+      - name: Save reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Folduo-Q-check-reports
+          path: |
+            app/build/reports
+            app/build/test-results
+          if-no-files-found: ignore
+          retention-days: 30
+

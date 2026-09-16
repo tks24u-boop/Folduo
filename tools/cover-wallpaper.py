@@ -23,6 +23,10 @@ def main():
             parser.error('端末を一台だけ接続するか、--serial を指定してください。')
         args.serial = devices[0]
     base = [args.adb, '-s', args.serial]
+    current_user = subprocess.run(base + ['shell', 'am', 'get-current-user'],
+                                  check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+    if current_user != '0':
+        parser.error('This helper requires the owner Android user (0).')
     jar = Path(__file__).with_name('cover-wallpaper-setup.jar')
     if not jar.is_file():
         parser.error('cover-wallpaper-setup.jarが見つかりません。先に tools/build-wallpaper-helper.py を実行してください。')

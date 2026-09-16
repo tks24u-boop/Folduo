@@ -123,7 +123,7 @@ public final class MotionService extends Service implements DisplayManager.Displ
         if(stopped||paused||bound==null||!Float.isFinite(value)||at>SystemClock.elapsedRealtime()+50||SystemClock.elapsedRealtime()-at>600)return;
         if(kind==0){if(source<1)status=UiText.of(R.string.coarse_angles);return;}
         // Direct fine sensors take priority while active; wallpaper is the fallback.
-        if(kind==1&&source>=2)return;
+        if(kind==1&&AngleSourcePolicy.suppressWallpaper(source,measuredAt,at))return;
         if(kind==source&&at<measuredAt)return;
         source=kind;measuredAt=at;target=value;
         acceptedAngles++;

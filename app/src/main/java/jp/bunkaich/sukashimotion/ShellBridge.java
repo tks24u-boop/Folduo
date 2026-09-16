@@ -50,6 +50,7 @@ public final class ShellBridge extends IShellBridge.Stub {
         authorize(); long token=Binder.clearCallingIdentity();
         try {
             Bundle b=new Bundle();b.putInt("uid",android.os.Process.myUid());b.putString("model",Build.MODEL);
+            b.putInt("sdk",Build.VERSION.SDK_INT);b.putString("build",Build.DISPLAY);
             b.putString("error",error);b.putBoolean("running",sink!=null);
             b.putBoolean("statusIconsHidden",bars!=null&&bars.hidden());
             b.putBoolean("samsungPermission",context!=null&&context.checkSelfPermission("com.samsung.permission.SSENSOR")==android.content.pm.PackageManager.PERMISSION_GRANTED);
@@ -77,7 +78,7 @@ public final class ShellBridge extends IShellBridge.Stub {
                             synchronized(sensors){row.putLong("events",row.getLong("events")+1);row.putLong("lastAt",SystemClock.elapsedRealtime());row.putFloatArray("values",event.values.clone());}
                             if(type==36||type==65686){
                                 // A 90-degree public sensor is a posture source, never label it fine.
-                                int source=type==65686?2:sensor.getResolution()<10?3:0;
+                                int source=AngleSourcePolicy.classify(type,sensor.getResolution());
                                 emit(event.values[0],SystemClock.elapsedRealtime(),source,generation);
                             }
                         }

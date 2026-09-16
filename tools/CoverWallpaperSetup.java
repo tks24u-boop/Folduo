@@ -25,12 +25,26 @@ public final class CoverWallpaperSetup {
                 && "video_002.mp4".equals(extras.getBundle("serviceSettings").getString("filename"));
     }
 
+    private static Method exactApply(Class<?> api) {
+        try {
+            return api.getMethod("setWallpaperComponentChecked", WallpaperDescription.class,
+                    String.class, int.class, int.class, Bundle.class);
+        } catch (NoSuchMethodException unavailable) { return null; }
+    }
+    private static Method exactRestore(Class<?> api) {
+        try {
+            Method method = api.getMethod("setWallpaper", String.class, String.class, WallpaperDescription.class,
+                    boolean.class, Bundle.class, int.class, Class.forName("android.app.IWallpaperManagerCallback"),
+                    int.class, int.class, boolean.class, Bundle.class);
+            return method.getReturnType() == ParcelFileDescriptor.class ? method : null;
+        } catch (ReflectiveOperationException unavailable) { return null; }
+    }
     private static void run(String[] args) throws Exception {
         String action = args.length == 0 ? "status" : args[0];
         if (!action.equals("status") && !action.equals("apply") && !action.equals("restore-stock"))
             throw new IllegalArgumentException("Use status, apply, or restore-stock");
-        if (android.os.Process.myUid() != 2000 || !"SM-F966Z".equals(Build.MODEL))
-            throw new IllegalStateException("This setup is limited to ADB shell on the tested SM-F966Z");
+        if (android.os.Process.myUid() != 2000 || !jp.bunkaich.sukashimotion.DeviceProfile.supports(Build.MANUFACTURER,Build.MODEL,Build.VERSION.SDK_INT))
+            throw new IllegalStateException("Requires ADB shell on Samsung SM-F966Z or experimental SM-F966Q, Android 16");
         Looper.prepareMainLooper();
         Class<?> at = Class.forName("android.app.ActivityThread");
         Object thread = at.getMethod("systemMain").invoke(null);
@@ -46,6 +60,22 @@ public final class CoverWallpaperSetup {
         boolean live = info != null && LIVE.equals(info.getComponent())
                 && angleVideo((Bundle) getExtras.invoke(manager, COVER_HOME, 0));
         System.out.println("Cover home: " + (live ? "angle-aware stock video" : stock ? "original stock image" : "other wallpaper"));
+        System.out.println("Device: " + Build.MODEL + " / SDK " + Build.VERSION.SDK_INT + " / " + Build.DISPLAY);
+        WallpaperInfo innerInfo = (WallpaperInfo) WallpaperManager.class.getMethod("getWallpaperInfo", int.class, int.class)
+                .invoke(manager, 5, 0);
+        Bundle innerExtras = (Bundle) getExtras.invoke(manager, 5, 0);
+        boolean innerReady = innerInfo != null && LIVE.equals(innerInfo.getComponent()) && angleVideo(innerExtras);
+        Class<?> preflightApi = Class.forName("android.app.IWallpaperManager");
+        Method applyMethod = exactApply(preflightApi), restoreMethod = exactRestore(preflightApi);
+        int stockResource = 0;
+        try {
+            Context stockContext = context.createPackageContext(RESOURCE_PACKAGE, 0);
+            stockResource = stockContext.getResources().getIdentifier("sub_wallpaper_002", "drawable", RESOURCE_PACKAGE);
+        } catch (android.content.pm.PackageManager.NameNotFoundException missing) { }
+        System.out.println("Inner angle wallpaper: " + innerReady);
+        System.out.println("Stock image resource: " + (stockResource != 0));
+        System.out.println("Exact apply API: " + (applyMethod != null) + " / restore API: " + (restoreMethod != null));
+        System.out.println("Wallpaper diagnostics only; Q hardware validation is pending.");
         if (action.equals("status")) return;
         if ((!stock && !live)) throw new IllegalStateException("Wallpaper changed since setup; refusing to overwrite it");
         if (action.equals("apply") && live || action.equals("restore-stock") && stock) {
@@ -65,19 +95,17 @@ public final class CoverWallpaperSetup {
         // Call the existing setter directly so unrelated wallpaper history is retained.
         if (action.equals("apply")) {
             Bundle inner = (Bundle) getExtras.invoke(manager, 5, 0);
-            if (!angleVideo(inner)) throw new IllegalStateException("Expected inner angle-aware wallpaper unavailable");
+            if (!innerReady) throw new IllegalStateException("Expected inner angle-aware wallpaper unavailable");
+            if (restoreMethod == null || bytes.length == 0)
+                throw new IllegalStateException("Restore capability unavailable; no change made");
             WallpaperDescription.Builder builder = new WallpaperDescription.Builder();
             builder.getClass().getMethod("setComponent", ComponentName.class).invoke(builder, LIVE);
-            Method setter = null;
-            for (Method method : api.getMethods())
-                if (method.getName().equals("setWallpaperComponentChecked") && method.getParameterCount() == 5) setter = method;
+            Method setter = applyMethod;
             if (setter == null) throw new IllegalStateException("Expected wallpaper setter unavailable");
             setter.invoke(remote, builder.build(), context.getPackageName(), COVER_HOME, 0, inner);
             System.out.println("Applied angle-aware stock video to front HOME only");
         } else {
-            Method setter = null;
-            for (Method method : api.getMethods())
-                if (method.getName().equals("setWallpaper") && method.getParameterCount() == 11) setter = method;
+            Method setter = restoreMethod;
             if (setter == null) throw new IllegalStateException("Expected wallpaper restore setter unavailable");
             Bundle extras = new Bundle(); extras.putString("uri", STOCK_URI); extras.putBoolean("isPreloaded", true);
             ParcelFileDescriptor file = (ParcelFileDescriptor) setter.invoke(remote, null, context.getPackageName(),
