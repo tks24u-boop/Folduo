@@ -5,8 +5,13 @@ set -euo pipefail
 router_reports=app/build/reports/router-emulator
 mkdir -p "$router_reports"
 router_image='system-images;android-36;google_apis;x86_64'
+# New command-line tools and the emulator can choose different default AVD roots.
+# Give both tools the same explicit location without changing the user's HOME.
+export ANDROID_AVD_HOME="${RUNNER_TEMP:-/tmp}/folduo-ci-avd"
+mkdir -p "$ANDROID_AVD_HOME"
 sdkmanager 'emulator' "$router_image"
-avdmanager create avd --force --name folduo-ci --package "$router_image" <<< 'no'
+avdmanager create avd --force --name folduo-ci --package "$router_image" --path "$ANDROID_AVD_HOME/folduo-ci.avd" <<< 'no'
+test -f "$ANDROID_AVD_HOME/folduo-ci.ini"
 if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
 "$ANDROID_HOME/emulator/emulator" -avd folduo-ci -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > "$router_reports/emulator.log" 2>&1 &
 router_emulator_pid=$!
