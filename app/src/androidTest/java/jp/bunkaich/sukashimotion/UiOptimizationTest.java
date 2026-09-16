@@ -61,18 +61,33 @@ public class UiOptimizationTest {
     @Test public void homeReturnUsesCachedCatalogButPackageChangeInvalidatesIt()throws Exception{
         try(ActivityScenario<HomeActivity> screen=ActivityScenario.launch(HomeActivity.class)){
             AtomicReference<HomeActivity> ref=new AtomicReference<>();screen.onActivity(ref::set);
-            waitFor(()->{instrumentation.waitForIdleSync();return !(boolean)field(ref.get(),"loadingApps")&&!(boolean)field(ref.get(),"appsDirty");});
-            Object cached=field(ref.get(),"apps");
-            screen.moveToState(Lifecycle.State.CREATED);screen.moveToState(Lifecycle.State.RESUMED);instrumentation.waitForIdleSync();
-            assertSame("Returning home without catalog changes must reuse labels/icons; last invalidation="+field(ref.get(),"lastCatalogInvalidation"),cached,field(ref.get(),"apps"));
-            instrumentation.runOnMainSync(()->((BroadcastReceiver)field(ref.get(),"packages")).onReceive(context,new Intent(Intent.ACTION_PACKAGE_CHANGED,android.net.Uri.parse("package:"+context.getPackageName()))));
-            instrumentation.waitForIdleSync();assertSame("Own permission/locale changes do not affect launcher entries",cached,field(ref.get(),"apps"));
-            AppCatalog.App installed=((java.util.List<AppCatalog.App>)cached).get(0);
-            screen.moveToState(Lifecycle.State.CREATED);
-            instrumentation.runOnMainSync(()->((BroadcastReceiver)field(ref.get(),"packages")).onReceive(context,new Intent(Intent.ACTION_PACKAGE_CHANGED,android.net.Uri.parse("package:"+installed.component().getPackageName()))));
-            screen.moveToState(Lifecycle.State.RESUMED);
-            waitFor(()->{instrumentation.waitForIdleSync();return !(boolean)field(ref.get(),"loadingApps");});
-            assertNotSame("A package change must reload the catalog",cached,field(ref.get(),"apps"));
+            BroadcastReceiver receiver=(BroadcastReceiver)field(ref.get(),"packages");
+            // A freshly booted Google emulator changes carrier/system packages in
+            // the background. Isolate the no-package-change condition; deliver the
+            // relevant and irrelevant notifications explicitly below. Real Activity
+            // stop/resume, catalog queries, icons and executor completion still run.
+            screen.onActivity(a->a.unregisterReceiver(receiver));
+            try{
+                waitFor(()->{instrumentation.waitForIdleSync();return !(boolean)field(ref.get(),"loadingApps")&&!(boolean)field(ref.get(),"appsDirty");});
+                Object cached=field(ref.get(),"apps");
+                screen.moveToState(Lifecycle.State.CREATED);screen.moveToState(Lifecycle.State.RESUMED);instrumentation.waitForIdleSync();
+                assertSame("Returning home without catalog changes must reuse labels/icons; last invalidation="+field(ref.get(),"lastCatalogInvalidation"),cached,field(ref.get(),"apps"));
+                instrumentation.runOnMainSync(()->receiver.onReceive(context,new Intent(Intent.ACTION_PACKAGE_CHANGED,android.net.Uri.parse("package:"+context.getPackageName()))));
+                instrumentation.waitForIdleSync();assertSame("Own permission/locale changes do not affect launcher entries",cached,field(ref.get(),"apps"));
+                AppCatalog.App installed=((java.util.List<AppCatalog.App>)cached).get(0);
+                screen.moveToState(Lifecycle.State.CREATED);
+                instrumentation.runOnMainSync(()->receiver.onReceive(context,new Intent(Intent.ACTION_PACKAGE_CHANGED,android.net.Uri.parse("package:"+installed.component().getPackageName()))));
+                screen.moveToState(Lifecycle.State.RESUMED);
+                waitFor(()->{instrumentation.waitForIdleSync();return !(boolean)field(ref.get(),"loadingApps");});
+                assertNotSame("A package change must reload the catalog",cached,field(ref.get(),"apps"));
+            }finally{
+                screen.moveToState(Lifecycle.State.RESUMED);
+                screen.onActivity(a->{
+                    IntentFilter filter=new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
+                    filter.addAction(Intent.ACTION_PACKAGE_REMOVED);filter.addAction(Intent.ACTION_PACKAGE_CHANGED);filter.addDataScheme("package");
+                    a.registerReceiver(receiver,filter,Context.RECEIVER_NOT_EXPORTED);
+                });
+            }
         }
     }
     @Test public void cancelledTexturesKeepCallerBitmapUsable(){
