@@ -175,4 +175,5 @@
     <string name="home_default">Folduoをホームアプリにする</string>
     <string name="home_setup">Folduoのホーム画面も使えます。開閉演出が有効なときは、選んだアプリを操作中の画面へ表示します。アイコンは長押しで入れ替えられます。</string>
     <string name="device_report">Device: %1$s / SDK %2$d / Build %3$s</string>
+    <string name="display_geometry_changed">開閉中に画面の向きやサイズが変わったため、通常表示に戻しました。</string>
 </resources>

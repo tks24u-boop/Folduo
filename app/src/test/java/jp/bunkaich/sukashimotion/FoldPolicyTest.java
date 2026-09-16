@@ -3,6 +3,15 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 import static jp.bunkaich.sukashimotion.FoldPolicy.Change.*;
 public class FoldPolicyTest {
+ @Test public void oppositeEndpointCannotReuseDwellTime(){
+  FoldPolicy p=new FoldPolicy(false);p.update(20,0);p.update(180,10);
+  assertEquals(CLOSE,p.update(0,140));assertTrue(p.active);
+  assertEquals(NONE,p.update(0,200));assertEquals(FINISH_CLOSED,p.update(0,260));
+ }
+ @Test public void duplicateMeasurementTimeDoesNotCompleteFold(){
+  FoldPolicy p=new FoldPolicy(false);p.update(20,0);p.update(180,10);
+  for(int i=0;i<100;i++)assertEquals(NONE,p.update(180,10));assertTrue(p.active);
+ }
  @Test public void openingAndEndpointDwell(){FoldPolicy p=new FoldPolicy(false);assertEquals(NONE,p.update(0,0));assertEquals(OPEN,p.update(7,10));assertEquals(NONE,p.update(90,20));assertEquals(NONE,p.update(179,30));assertEquals(NONE,p.update(180,130));assertEquals(FINISH_OPEN,p.update(180,150));assertFalse(p.active);}
  @Test public void closingAndEndpointDwell(){FoldPolicy p=new FoldPolicy(true);assertEquals(CLOSE,p.update(172,0));assertEquals(NONE,p.update(0,40));assertEquals(FINISH_CLOSED,p.update(0,160));}
  @Test public void jitterNeverReverses(){FoldPolicy p=new FoldPolicy(false);p.update(20,0);for(int i=0;i<10;i++){assertEquals(NONE,p.update(25,10));assertEquals(NONE,p.update(18,20));}assertTrue(p.open);}

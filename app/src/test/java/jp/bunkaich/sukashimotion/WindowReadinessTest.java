@@ -21,4 +21,11 @@ public class WindowReadinessTest {
     @Test public void overlayDoesNotQualify(){assertFalse(WindowReadiness.parse(DRAWN.replace("BASE_APPLICATION","APPLICATION_OVERLAY"),0).ready());}
     @Test public void onlyGeometryIsReturned(){assertEquals("[0,0][1968,2184]",WindowReadiness.parse(DRAWN,0).geometry());}
     @Test public void exitingWindowIsNotReady(){assertFalse(WindowReadiness.parse(DRAWN+" mAnimatingExit=true",0).ready());}
+    @Test public void taskIdentityIsReadFromWindowDump(){assertEquals(7,WindowReadiness.parse(DRAWN,0).taskId());}
+    @Test public void missingTaskIsNotGuessedFromRootId(){assertEquals(-1,WindowReadiness.parse(DRAWN.replace("taskId=7","rootTaskId=7"),0).taskId());}
+    @Test public void foregroundTaskIsNotReplacedByReadyBackgroundTask(){
+        String top=DRAWN.replace("taskId=7","taskId=31").replace("HAS_DRAWN","DRAW_PENDING");
+        WindowReadiness.State state=WindowReadiness.parse(top+DRAWN,0);
+        assertFalse(state.ready());assertEquals(31,state.taskId());
+    }
 }

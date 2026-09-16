@@ -12,7 +12,6 @@ import java.util.*;
 /** Move app and home tasks without swapping physical/logical display IDs. */
 final class TaskDisplayRouter {
     private final Object manager;private final Class<?> api;
-    private int lastDestination;
     private final Set<Integer> movedTasks=new LinkedHashSet<>();
     TaskDisplayRouter()throws Exception{
         manager=Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null);
@@ -31,37 +30,45 @@ final class TaskDisplayRouter {
         for(Object root:roots(display))if(activityType(root)==2&&root.getClass().getField("topActivity").get(root)!=null)return root;
         return null;
     }
-    private void moveHome(Object root,int destination,boolean focus)throws Exception{
+    private int moveHome(Object root,int destination,boolean focus)throws Exception{
         // Samsung permits one HOME root per display. Use an already-created HOME,
         // never reparent a second HOME root into it.
         Object existing=home(destination);
-        if(existing!=null)root=existing;
+        if(existing!=null){
+            ComponentName selected=(ComponentName)root.getClass().getField("topActivity").get(root);
+            // An old Folduo HOME root is not a substitute for the selected One UI HOME.
+            if(selected==null||!selected.equals(existing.getClass().getField("topActivity").get(existing)))
+                throw new IllegalStateException("@folduo/err_home_missing");
+            root=existing;
+        }
         int id=number(root,"taskId");
         if(number(root,"displayId")!=destination)api.getMethod("moveRootTaskToDisplayOnTopOrBottom",int.class,int.class,boolean.class).invoke(manager,id,destination,focus);
         if(focus)api.getMethod("setFocusedRootTask",int.class).invoke(manager,id);
-        lastDestination=destination;
+        return id;
     }
-    synchronized void showHome(int display)throws Exception{
-        showHome(display,null);
+    synchronized int showHome(int display)throws Exception{
+        return showHome(display,null);
     }
-    synchronized void showHome(int display,ComponentName preferred)throws Exception{
+    synchronized int showHome(int display,ComponentName preferred)throws Exception{
         if(preferred!=null){
             Object task=homeTask(display,preferred);
             if(task==null)task=homeTask(display==0?1:0,preferred);
-            if(task!=null){moveHomeTask(task,display);return;}
+            if(task!=null)return moveHomeTask(task,display);
+            // Restore normal Android control rather than resurrecting another launcher.
+            throw new IllegalStateException("@folduo/err_home_missing");
         }
         Object root=home(display);if(root==null)root=home(display==0?1:0);
         if(root==null)throw new IllegalStateException("@folduo/err_home_missing");
-        moveHome(root,display,true);
+        return moveHome(root,display,true);
     }
     private Object homeTask(int display,ComponentName component)throws Exception{
         List<?> tasks=(List<?>)api.getMethod("getTasks",int.class,boolean.class,boolean.class,int.class).invoke(manager,64,false,false,display);
         for(Object task:tasks)if(activityType(task)==2&&matchesLaunch(task,component))return task;
         return null;
     }
-    private void moveHomeTask(Object task,int destination)throws Exception{
+    private int moveHomeTask(Object task,int destination)throws Exception{
         int source=number(task,"displayId"),id=number(task,"taskId");
-        if(source==destination){resumeHomeTask(id,destination);return;}
+        if(source==destination){resumeHomeTask(id,destination);return id;}
         Object sourceRoot=home(source),destinationRoot=home(destination);
         if(sourceRoot==null)throw new IllegalStateException("@folduo/err_source_home_missing");
         // Keep Samsung's one-HOME-root-per-display invariant, but transfer the
@@ -69,18 +76,32 @@ final class TaskDisplayRouter {
         if(destinationRoot!=null&&id!=number(sourceRoot,"taskId")){
             api.getMethod("moveTaskToRootTask",int.class,int.class,boolean.class).invoke(manager,id,number(destinationRoot,"taskId"),true);
             resumeHomeTask(id,destination);
-        }else moveHome(sourceRoot,destination,true);
+            return id;
+        }else return moveHome(sourceRoot,destination,true);
     }
     private void resumeHomeTask(int id,int display)throws Exception{
         int result=(int)api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,id,ActivityOptions.makeBasic().setLaunchDisplayId(display).toBundle());
         if(result<0)throw new IllegalStateException("@folduo/err_home_missing");
-        api.getMethod("setFocusedTask",int.class).invoke(manager,id);lastDestination=display;
+        confirmTask(id,display);api.getMethod("setFocusedTask",int.class).invoke(manager,id);
+    }
+    private void confirmTask(int id,int display)throws Exception{
+        for(int attempt=0;attempt<20;attempt++){
+            List<?> running=(List<?>)api.getMethod("getTasks",int.class,boolean.class,boolean.class,int.class).invoke(manager,64,false,false,display);
+            for(Object task:running)if(number(task,"taskId")==id&&number(task,"displayId")==display)return;
+            android.os.SystemClock.sleep(25);
+        }
+        throw new IllegalStateException("@folduo/err_launch_unconfirmed");
     }
     private List<?> tasks(int display)throws Exception{return (List<?>)api.getMethod("getTasks",int.class,boolean.class,boolean.class,int.class).invoke(manager,1,false,false,display);}
     synchronized Bundle move(int source,int destination,boolean idle)throws Exception{
+        return move(source,destination,idle,null);
+    }
+    synchronized Bundle move(int source,int destination,boolean idle,ComponentName preferredHome)throws Exception{
         Bundle result=new Bundle();List<?> tasks=tasks(source);
         if(!tasks.isEmpty()&&activityType(tasks.get(0))==2){
-            moveHomeTask(tasks.get(0),destination);result.putBoolean("ok",true);result.putBoolean("moved",true);result.putBoolean("home",true);return result;
+            int id=preferredHome==null?moveHomeTask(tasks.get(0),destination):showHome(destination,preferredHome);
+            confirmTask(id,destination);
+            result.putInt("taskId",id);result.putBoolean("ok",true);result.putBoolean("moved",true);result.putBoolean("home",true);return result;
         }
         if(tasks.isEmpty()||!standard(tasks.get(0))){
             if(idle){result.putBoolean("ok",true);return result;}
@@ -93,7 +114,8 @@ final class TaskDisplayRouter {
         Bundle options=ActivityOptions.makeBasic().setLaunchDisplayId(destination).toBundle();
         int launchResult=(int)api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,id,options);
         if(launchResult<0)throw new IllegalStateException("@folduo/err_launch_unconfirmed");
-        lastDestination=destination;movedTasks.add(id);result.putBoolean("ok",true);result.putBoolean("moved",true);result.putInt("taskId",id);return result;
+        movedTasks.add(id);confirmTask(id,destination);api.getMethod("setFocusedTask",int.class).invoke(manager,id);
+        result.putBoolean("ok",true);result.putBoolean("moved",true);result.putInt("taskId",id);return result;
     }
     synchronized ArrayList<Bundle> recentApps(android.content.Context context)throws Exception{
         Object slice=api.getMethod("getRecentTasks",int.class,int.class,int.class).invoke(manager,24,2,android.os.Process.myUid()/100000);
@@ -119,7 +141,7 @@ final class TaskDisplayRouter {
         for(Object task:(List<?>)slice.getClass().getMethod("getList").invoke(slice))if(number(task,"taskId")==taskId&&standard(task)){
             int launchResult=(int)api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,taskId,ActivityOptions.makeBasic().setLaunchDisplayId(display).toBundle());
             if(launchResult<0)throw new IllegalStateException("@folduo/err_launch_unconfirmed");
-            lastDestination=display;movedTasks.add(taskId);focusTop(display);return;
+            movedTasks.add(taskId);confirmTask(taskId,display);api.getMethod("setFocusedTask",int.class).invoke(manager,taskId);return;
         }
         throw new IllegalStateException("@folduo/err_app_finished");
     }
@@ -178,13 +200,14 @@ final class TaskDisplayRouter {
         // the task that belongs to the exact selected launcher component.
         launch.run();
         for (int attempt = 0; attempt < 25; attempt++) {
-            List<?> running = (List<?>) api.getMethod("getTasks", int.class, boolean.class, boolean.class, int.class).invoke(manager, 16, false, false, 0);
+            List<Object> running=new ArrayList<>();
+            for(int candidate:new int[]{0,display})running.addAll((List<?>)api.getMethod("getTasks",int.class,boolean.class,boolean.class,int.class).invoke(manager,16,false,false,candidate));
             for (Object task : running) {
                 if (!standard(task) || !matchesLaunch(task, component)) continue;
                 int id = number(task, "taskId");
                 int result = (int) api.getMethod("startActivityFromRecents", int.class, Bundle.class).invoke(manager, id, ActivityOptions.makeBasic().setLaunchDisplayId(display).toBundle());
                 if (result < 0) throw new IllegalStateException("@folduo/err_launch_unconfirmed");
-                movedTasks.add(id); lastDestination = display; focusTop(display);
+                movedTasks.add(id);confirmTask(id,display);api.getMethod("setFocusedTask",int.class).invoke(manager,id);
                 android.util.Log.i("FolduoLaunch", "selected task=" + id + " display=" + display);
                 return;
             }
@@ -207,7 +230,7 @@ final class TaskDisplayRouter {
             for(int i=0;i<20&&task<0;i++){android.os.SystemClock.sleep(50);task=settingsTask();}
         }
         if(task<0)throw new IllegalStateException("@folduo/err_settings_missing");
-        selectRecent(task,display);lastDestination=display;
+        selectRecent(task,display);
     }
     synchronized android.graphics.Bitmap preview(int taskId)throws Exception{
         // Only use the platform's recents snapshot, which excludes protected windows.
@@ -231,17 +254,25 @@ final class TaskDisplayRouter {
         }finally{buffer.close();}
     }
     synchronized void restore()throws Exception{
+        restore(null);
+    }
+    synchronized void restore(ComponentName preferredHome)throws Exception{
         List<?> visible=tasks(1);Object top=visible.isEmpty()?null:visible.get(0);
         int active=top!=null&&standard(top)?number(top,"taskId"):-1;
+        Exception failure=null;
         // Return the current app first. Do not sweep unrelated HOME roots or change
         // which unrelated application was selected after the fold.
-        if(active>=0){
+        try{if(active>=0){
             int launchResult=(int)api.getMethod("startActivityFromRecents",int.class,Bundle.class).invoke(manager,active,ActivityOptions.makeBasic().setLaunchDisplayId(0).toBundle());
             if(launchResult<0)throw new IllegalStateException("@folduo/err_launch_unconfirmed");
         }
-        else if(top!=null&&activityType(top)==2)moveHomeTask(top,0);
-        for(Object root:roots(1))if(standard(root)&&movedTasks.contains(number(root,"taskId"))&&number(root,"taskId")!=active)
-            api.getMethod("moveRootTaskToDisplayOnTopOrBottom",int.class,int.class,boolean.class).invoke(manager,number(root,"taskId"),0,false);
-        movedTasks.clear();lastDestination=0;
+        else if(top!=null&&activityType(top)==2){if(preferredHome==null)moveHomeTask(top,0);else showHome(0,preferredHome);}
+        }catch(Exception e){failure=e;}
+        // One app refusing restoration must not strand the other tasks we moved.
+        try{for(Object root:roots(1))if(standard(root)&&movedTasks.contains(number(root,"taskId"))&&number(root,"taskId")!=active){
+            try{api.getMethod("moveRootTaskToDisplayOnTopOrBottom",int.class,int.class,boolean.class).invoke(manager,number(root,"taskId"),0,false);}
+            catch(Exception e){if(failure==null)failure=e;else failure.addSuppressed(e);}
+        }}finally{movedTasks.clear();}
+        if(failure!=null)throw failure;
     }
 }

@@ -16,7 +16,7 @@ public class TaskDisplayRouterTest {
   Info(int id,int display,int type){taskId=id;displayId=display;configuration=new Config(type);}
  }
  public static class Manager {
-  List<Info> all=new ArrayList<>();int resumed=-1,focused=-1;List<String> moves=new ArrayList<>();
+  List<Info> all=new ArrayList<>();int resumed=-1,focused=-1,launchResult=0;boolean ignoreLaunch;List<String> moves=new ArrayList<>();
   public List<Info> getTasks(int count,boolean visible,boolean intent,int display){return all.stream().filter(i->i.displayId==display&&i.topActivity!=null).toList();}
   public List<Info> getAllRootTaskInfosOnDisplay(int display){return all.stream().filter(i->i.displayId==display&&i.parentTaskId<0).toList();}
   public void moveTaskToRootTask(int id,int root,boolean top){
@@ -31,7 +31,7 @@ public class TaskDisplayRouterTest {
   }
   public void setFocusedRootTask(int id){focused=id;}
   public void setFocusedTask(int id){focused=id;}
-  public int startActivityFromRecents(int id,Bundle options){resumed=id;all.stream().filter(i->i.taskId==id).forEach(i->i.displayId=options.getInt("android.activity.launchDisplayId", -1));return 0;}
+  public int startActivityFromRecents(int id,Bundle options){resumed=id;if(launchResult>=0&&!ignoreLaunch)all.stream().filter(i->i.taskId==id).forEach(i->i.displayId=options.getInt("android.activity.launchDisplayId", -1));return launchResult;}
  }
  @Test public void homeUsesExistingDestinationWithoutMovingAnotherRoot()throws Exception{
   Manager m=new Manager();m.all.add(new Info(7,0,2));m.all.add(new Info(8,1,2));TaskDisplayRouter r=new TaskDisplayRouter(m,Manager.class);
@@ -87,5 +87,50 @@ public class TaskDisplayRouterTest {
   router.move(0,1,false);assertEquals(1,launcher.displayId);assertEquals(8,launcher.parentTaskId);assertEquals(10,m.focused);
   router.move(1,0,false);assertEquals(0,launcher.displayId);assertEquals(7,launcher.parentTaskId);
   assertEquals(List.of("child:10:8","child:10:7"),m.moves);
+ }
+ @Test public void foldUsesCurrentDefaultInsteadOfFormerLauncher()throws Exception{
+  Manager m=new Manager();ComponentName oneUi=new ComponentName("oneui","oneui.Home");
+  Info old=new Info(10,0,2);old.realActivity=new ComponentName("folduo","folduo.Home");m.all.add(old);
+  Info selected=new Info(11,1,2);selected.realActivity=oneUi;m.all.add(selected);
+  Bundle result=new TaskDisplayRouter(m,Manager.class).move(0,1,false,oneUi);
+  assertEquals(11,result.getInt("taskId"));assertEquals(11,m.focused);assertEquals(0,old.displayId);
+ }
+ @Test public void missingPreferredHomeNeverFallsBackToOldLauncher(){
+  Manager m=new Manager();m.all.add(new Info(8,1,2));
+  assertThrows(IllegalStateException.class,()->new TaskDisplayRouter(m,Manager.class).showHome(1,new ComponentName("oneui","oneui.Home")));
+  assertEquals(-1,m.focused);assertEquals(-1,m.resumed);
+ }
+ @Test public void differentHomeRootNeverReplacesSelectedLauncher(){
+  Manager m=new Manager();Info a=new Info(7,0,2),b=new Info(8,1,2);
+  a.topActivity=new ComponentName("oneui","oneui.Home");b.topActivity=new ComponentName("folduo","folduo.Home");m.all.add(a);m.all.add(b);
+  assertThrows(IllegalStateException.class,()->new TaskDisplayRouter(m,Manager.class).move(0,1,false));
+  assertEquals(-1,m.focused);assertTrue(m.moves.isEmpty());
+ }
+ @Test public void frameworkSuccessWithoutActualTransferIsRejected(){
+  Manager m=new Manager();Info app=new Info(31,0,1);m.all.add(app);m.ignoreLaunch=true;
+  assertThrows(IllegalStateException.class,()->new TaskDisplayRouter(m,Manager.class).move(0,1,false));
+  assertEquals(0,app.displayId);assertEquals(-1,m.focused);
+ }
+ @Test public void negativeLaunchDoesNotMoveOrFocus(){
+  Manager m=new Manager();Info app=new Info(31,0,1);m.all.add(app);m.launchResult=-1;
+  assertThrows(IllegalStateException.class,()->new TaskDisplayRouter(m,Manager.class).move(0,1,false));
+  assertEquals(0,app.displayId);assertEquals(-1,m.focused);
+ }
+ @Test public void selectedTaskIsFocusedEvenWhenTopListStillHasOldHome()throws Exception{
+  Manager m=new Manager();m.all.add(new Info(8,1,2));ComponentName chosen=new ComponentName("calculator","calculator.Main");
+  Info app=new Info(31,0,1);app.realActivity=chosen;m.all.add(app);
+  new TaskDisplayRouter(m,Manager.class).launchSelected(chosen,1,()->{});
+  assertEquals(31,m.focused);assertEquals(1,app.displayId);
+ }
+ @Test public void appAlreadyOnInnerCanBeSelectedAgain()throws Exception{
+  Manager m=new Manager();m.all.add(new Info(8,1,2));ComponentName chosen=new ComponentName("calculator","calculator.Main");
+  Info app=new Info(31,1,1);app.realActivity=chosen;m.all.add(app);
+  new TaskDisplayRouter(m,Manager.class).launchSelected(chosen,1,()->{});assertEquals(31,m.focused);
+ }
+ @Test public void restorationContinuesAfterOneAppRejectsResume()throws Exception{
+  Manager m=new Manager();Info first=new Info(31,0,1);m.all.add(first);TaskDisplayRouter r=new TaskDisplayRouter(m,Manager.class);
+  r.move(0,1,false);Info active=new Info(32,1,1);m.all.add(0,active);m.launchResult=-1;
+  assertThrows(IllegalStateException.class,r::restore);
+  assertEquals(0,first.displayId);assertEquals(1,active.displayId);assertEquals(List.of("31:0:false"),m.moves);
  }
 }

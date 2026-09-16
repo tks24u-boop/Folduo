@@ -176,4 +176,5 @@
     <string name="home_default">Use Folduo as the home app</string>
     <string name="home_setup">Folduo includes a home screen with app icons. While fold animation is active, it opens selected apps on the screen you are using. Long-press an icon to change it.</string>
     <string name="device_report">Device: %1$s / SDK %2$d / Build %3$s</string>
+    <string name="display_geometry_changed">The display rotated or changed size during the transition. Normal display restored.</string>
 </resources>

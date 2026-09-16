@@ -8,7 +8,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -26,7 +26,9 @@ jobs:
       - name: Unit tests, lint and APK
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:lintRelease :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Test task routing on Android emulator
+        run: bash tools/test-task-router.sh
       - name: Build wallpaper helper
         run: |
           python3 -m py_compile tools/cover-wallpaper.py tools/build-wallpaper-helper.py
@@ -34,18 +36,18 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist/wallpaper
-          cp app/build/outputs/apk/release/app-release.apk dist/Folduo-0.1.21-q1.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/Folduo-0.1.21-q3.apk
           cp tools/cover-wallpaper.py tools/cover-wallpaper-setup.jar LICENSE dist/wallpaper/
           cp README.SM-F966Q.md dist/
           cd dist
           zip -r folduo-wallpaper-setup-q2.zip wallpaper
-          sha256sum Folduo-0.1.21-q1.apk folduo-wallpaper-setup-q2.zip > SHA256SUMS
+          sha256sum Folduo-0.1.21-q3.apk folduo-wallpaper-setup-q2.zip > SHA256SUMS
       - name: Save test build
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Folduo-SM-F966Q-experimental
+          name: Folduo-SM-F966Q-q3
           path: |
-            dist/Folduo-0.1.21-q1.apk
+            dist/Folduo-0.1.21-q3.apk
             dist/folduo-wallpaper-setup-q2.zip
             dist/README.SM-F966Q.md
             dist/SHA256SUMS
@@ -75,4 +77,3 @@ jobs:
             app/build/test-results
           if-no-files-found: ignore
           retention-days: 30
-

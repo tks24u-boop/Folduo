@@ -4,6 +4,7 @@ package jp.bunkaich.sukashimotion;
 final class FoldPolicy {
     enum Change { NONE, OPEN, CLOSE, FINISH_OPEN, FINISH_CLOSED }
     boolean open,active;float extreme;long endpointSince=-1;
+    private int endpoint=-1;
     FoldPolicy(boolean initiallyInner){open=initiallyInner;extreme=initiallyInner?180:0;}
     Change update(float angle,long now){
         if(!Float.isFinite(angle)||angle<0||angle>180)return Change.NONE;
@@ -13,11 +14,14 @@ final class FoldPolicy {
             // Public state may have skipped the entire motion. Do not synthesize an animation.
             if(angle>=176)open=true;if(angle<=3)open=false;return Change.NONE;
         }
-        boolean atEnd=angle>=176||angle<=1;
-        if(atEnd){
-            if(endpointSince<0)endpointSince=now;
-            if(now-endpointSince>=120){active=false;open=angle>=176;endpointSince=-1;return open?Change.FINISH_OPEN:Change.FINISH_CLOSED;}
-        }else endpointSince=-1;
+        int nextEndpoint=angle>=176?1:angle<=1?0:-1;
+        if(nextEndpoint>=0){
+            // A quick full reversal must dwell at its OWN endpoint. Time spent at
+            // the opposite endpoint must never count towards completing this fold.
+            if(endpointSince<0||endpoint!=nextEndpoint||now<endpointSince)endpointSince=now;
+            endpoint=nextEndpoint;
+            if(now-endpointSince>=120){active=false;open=nextEndpoint==1;endpointSince=-1;endpoint=-1;return open?Change.FINISH_OPEN:Change.FINISH_CLOSED;}
+        }else {endpointSince=-1;endpoint=-1;}
         if(open){extreme=Math.max(extreme,angle);if(extreme-angle>=12){open=false;extreme=angle;return Change.CLOSE;}}
         else{extreme=Math.min(extreme,angle);if(angle-extreme>=12){open=true;extreme=angle;return Change.OPEN;}}
         return Change.NONE;

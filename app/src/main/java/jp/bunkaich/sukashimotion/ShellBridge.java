@@ -135,14 +135,14 @@ public final class ShellBridge extends IShellBridge.Stub {
             if(sink==null||displayControl==null||!displayControl.isOwned())throw new IllegalStateException("@folduo/err_control_stopped");
             if((sourceDisplayId!=0&&sourceDisplayId!=1)||(targetDisplayId!=0&&targetDisplayId!=1)||sourceDisplayId==targetDisplayId)throw new IllegalArgumentException("@folduo/err_distinct_displays");
             if(taskRouter==null)taskRouter=new TaskDisplayRouter();
-            return taskRouter.move(sourceDisplayId,targetDisplayId,idle);
+            return taskRouter.move(sourceDisplayId,targetDisplayId,idle,preferredHome());
         }catch(Exception e){result.putString("error",message(e));return result;}
         finally{Binder.restoreCallingIdentity(token);}
     }
     @Override public void release(){authorize();long token=Binder.clearCallingIdentity();try{releaseInternal();}finally{Binder.restoreCallingIdentity(token);}}
     private synchronized void releaseInternal(){
         try{if(bars!=null)bars.hide(false);}catch(Exception e){error=message(e);}
-        try{if(taskRouter!=null&&displayControl!=null&&displayControl.isOwned())taskRouter.restore();}catch(Exception e){error=message(e);}
+        try{if(taskRouter!=null&&displayControl!=null&&displayControl.isOwned())taskRouter.restore(preferredHome());}catch(Exception e){error=message(e);}
         finally{if(displayControl!=null)displayControl.close();taskRouter=null;}
     }
     @Override public synchronized Bundle statusIcons(boolean hidden){
@@ -158,9 +158,7 @@ public final class ShellBridge extends IShellBridge.Stub {
             if(displayId!=1||sink==null||displayControl==null||!displayControl.isOwned())throw new IllegalStateException("@folduo/err_inner_unavailable");
             if(taskRouter==null)taskRouter=new TaskDisplayRouter();
             if(action==android.view.KeyEvent.KEYCODE_HOME){
-                android.content.Intent home=new android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME);
-                android.content.ComponentName preferred=home.resolveActivity(context.getPackageManager());
-                taskRouter.showHome(displayId,preferred);
+                taskRouter.showHome(displayId,preferredHome());
             }
             else if(action==InnerNavigation.SETTINGS)taskRouter.openSettings(context,displayId);
             else if(action==InnerNavigation.PREVIEW)result.putParcelable("preview",taskRouter.preview(taskId));
@@ -170,6 +168,10 @@ public final class ShellBridge extends IShellBridge.Stub {
             else throw new IllegalArgumentException("@folduo/err_unsupported_action");
             result.putBoolean("ok",true);
         }catch(Exception e){result.putString("error",message(e));}finally{Binder.restoreCallingIdentity(token);}return result;
+    }
+    private android.content.ComponentName preferredHome(){
+        android.content.Intent home=new android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME);
+        return home.resolveActivity(context.getPackageManager());
     }
     @Override public synchronized Bundle launchApp(int displayId,String component){
         authorize();long token=Binder.clearCallingIdentity();Bundle result=new Bundle();
@@ -193,7 +195,7 @@ public final class ShellBridge extends IShellBridge.Stub {
             ScheduledFuture<?> timeout=life.schedule(owned::destroy,1200,TimeUnit.MILLISECONDS);
             String dump;try(InputStream in=process.getInputStream()){dump=new String(in.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);}finally{timeout.cancel(false);}
             WindowReadiness.State state=WindowReadiness.parse(dump,displayId);
-            result.putBoolean("ready",state.ready());result.putString("geometry",state.geometry());
+            result.putBoolean("ready",state.ready());result.putString("geometry",state.geometry());result.putInt("taskId",state.taskId());
         }catch(Exception e){result.putString("error",message(e));}
         finally{if(process!=null)process.destroy();Binder.restoreCallingIdentity(token);}return result;
     }
