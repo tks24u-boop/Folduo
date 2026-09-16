@@ -10,10 +10,18 @@ avdmanager create avd --force --name folduo-ci --package "$router_image" <<< 'no
 if [[ -e /dev/kvm ]]; then sudo chmod 666 /dev/kvm; fi
 "$ANDROID_HOME/emulator/emulator" -avd folduo-ci -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect > "$router_reports/emulator.log" 2>&1 &
 router_emulator_pid=$!
-trap 'adb emu kill >/dev/null 2>&1 || true; kill "$router_emulator_pid" 2>/dev/null || true' EXIT
-timeout 180 adb wait-for-device
+router_cleanup() {
+    router_result=$?
+    if [[ "$router_result" != 0 ]]; then tail -100 "$router_reports/emulator.log"; fi
+    adb emu kill >/dev/null 2>&1 || true
+    kill "$router_emulator_pid" 2>/dev/null || true
+}
+trap router_cleanup EXIT
 router_booted=false
 for attempt in $(seq 1 90); do
+    # Surface an emulator crash immediately instead of spending three minutes
+    # waiting for an ADB device that can never appear.
+    kill -0 "$router_emulator_pid"
     if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; then router_booted=true; break; fi
     sleep 2
 done
