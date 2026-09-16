@@ -23,9 +23,18 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
     private AlertDialog drawer;
     private boolean started, launching, appsDirty=true, loadingApps;
     private int batteryLevel=-1, iconDensity;
+    private String lastCatalogInvalidation="initial";
     private Runnable updateDrawer;
     private final BroadcastReceiver packages=new BroadcastReceiver(){
         @Override public void onReceive(Context context,Intent intent){
+            String pkg=intent.getData()==null?null:intent.getData().getSchemeSpecificPart();
+            // Own permission/locale changes and background-only packages do not
+            // alter this catalog (Folduo itself is excluded by AppCatalog.load).
+            if(pkg==null||pkg.equals(getPackageName()))return;
+            boolean listed=apps.stream().anyMatch(app->app.component().getPackageName().equals(pkg));
+            Intent query=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(pkg);
+            if(!loadingApps&&!listed&&getPackageManager().queryIntentActivities(query,0).isEmpty())return;
+            lastCatalogInvalidation=intent.getAction()+":"+pkg;
             appsDirty=true;if(started)refreshApps();
         }
     };
@@ -96,7 +105,7 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
     @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); if (drawer != null) drawer.dismiss(); }
     @Override public void onConfigurationChanged(Configuration c) {
         super.onConfigurationChanged(c);updatePanel();
-        if(iconDensity!=c.densityDpi){iconDensity=c.densityDpi;appsDirty=true;if(started)refreshApps();}
+        if(iconDensity!=c.densityDpi){lastCatalogInvalidation="density:"+iconDensity+"->"+c.densityDpi;iconDensity=c.densityDpi;appsDirty=true;if(started)refreshApps();}
     }
 
     private void updatePanel() {
@@ -115,7 +124,7 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
             final List<AppCatalog.App> result=loaded;
             main.post(() -> {
                 loadingApps=false;if(isDestroyed())return;
-                if(result==null){appsDirty=true;return;}
+                if(result==null){appsDirty=true;if(updateDrawer!=null)updateDrawer.run();return;}
                 // A package/configuration change during loading invalidates that result.
                 if(appsDirty){if(started)refreshApps();return;}
                 apps=result;scene.updateApps(AppCatalog.favorites(apps,prefs));

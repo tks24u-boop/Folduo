@@ -37,13 +37,14 @@ adb shell appops set jp.bunkaich.sukashimotion SYSTEM_ALERT_WINDOW allow
 adb shell wm dismiss-keyguard
 adb shell am instrument -w -r -e class jp.bunkaich.sukashimotion.TaskDisplayRouterTest,jp.bunkaich.sukashimotion.HomeInteractionTest,jp.bunkaich.sukashimotion.InnerNavigationTest,jp.bunkaich.sukashimotion.UiOptimizationTest,jp.bunkaich.sukashimotion.NavigationResponseTest,jp.bunkaich.sukashimotion.LanguageTest#pickerSwitchesBothWaysAndFollowsSystemAgain jp.bunkaich.sukashimotion.test/androidx.test.runner.AndroidJUnitRunner | tee "$router_reports/instrumentation.txt"
 # am instrument may return zero even when a test fails or the process crashes.
-grep -Eq '^OK \([0-9]+ tests?\)' "$router_reports/instrumentation.txt"
+
 
 # Synthetic emulator screenshots, not user/device data. Keep images in reports and
 # emit compact JPEGs so the review can inspect the exact CI build from job logs.
 for panel in cover inner; do
-    adb pull "/sdcard/Android/data/jp.bunkaich.sukashimotion/files/dashboard-$panel.jpg" "$router_reports/dashboard-$panel.jpg"
+    if ! adb pull "/sdcard/Android/data/jp.bunkaich.sukashimotion/files/dashboard-$panel.jpg" "$router_reports/dashboard-$panel.jpg"; then continue; fi
     printf 'FOLDUO_UI_%s=' "$panel"
     base64 -w0 "$router_reports/dashboard-$panel.jpg"
     printf '\n'
 done
+grep -Eq '^OK \([0-9]+ tests?\)' "$router_reports/instrumentation.txt"

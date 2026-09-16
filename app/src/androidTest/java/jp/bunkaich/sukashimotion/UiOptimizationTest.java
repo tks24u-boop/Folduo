@@ -15,6 +15,9 @@ import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.Assert.*;
 
+// Finish lifecycle/cache checks before the explicit display-size override. Window
+// configuration restoration is asynchronous and must not invalidate that fixture.
+@FixMethodOrder(org.junit.runners.MethodSorters.NAME_ASCENDING)
 public class UiOptimizationTest {
     private final android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
     private final Context context=instrumentation.getTargetContext();
@@ -61,9 +64,12 @@ public class UiOptimizationTest {
             waitFor(()->{instrumentation.waitForIdleSync();return !(boolean)field(ref.get(),"loadingApps")&&!(boolean)field(ref.get(),"appsDirty");});
             Object cached=field(ref.get(),"apps");
             screen.moveToState(Lifecycle.State.CREATED);screen.moveToState(Lifecycle.State.RESUMED);instrumentation.waitForIdleSync();
-            assertSame("Returning home must reuse loaded labels/icons",cached,field(ref.get(),"apps"));
+            assertSame("Returning home without catalog changes must reuse labels/icons; last invalidation="+field(ref.get(),"lastCatalogInvalidation"),cached,field(ref.get(),"apps"));
+            instrumentation.runOnMainSync(()->((BroadcastReceiver)field(ref.get(),"packages")).onReceive(context,new Intent(Intent.ACTION_PACKAGE_CHANGED,android.net.Uri.parse("package:"+context.getPackageName()))));
+            instrumentation.waitForIdleSync();assertSame("Own permission/locale changes do not affect launcher entries",cached,field(ref.get(),"apps"));
+            AppCatalog.App installed=((java.util.List<AppCatalog.App>)cached).get(0);
             screen.moveToState(Lifecycle.State.CREATED);
-            instrumentation.runOnMainSync(()->((BroadcastReceiver)field(ref.get(),"packages")).onReceive(context,new Intent(Intent.ACTION_PACKAGE_CHANGED)));
+            instrumentation.runOnMainSync(()->((BroadcastReceiver)field(ref.get(),"packages")).onReceive(context,new Intent(Intent.ACTION_PACKAGE_CHANGED,android.net.Uri.parse("package:"+installed.component().getPackageName()))));
             screen.moveToState(Lifecycle.State.RESUMED);
             waitFor(()->{instrumentation.waitForIdleSync();return !(boolean)field(ref.get(),"loadingApps");});
             assertNotSame("A package change must reload the catalog",cached,field(ref.get(),"apps"));
