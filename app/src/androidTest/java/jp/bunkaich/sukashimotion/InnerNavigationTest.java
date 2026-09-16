@@ -31,4 +31,12 @@ public class InnerNavigationTest {
   ui(()->nav.showRecent(List.of()));View row=root();ui(()->find(row,activity.getString(R.string.nav_back)).performClick());ui(()->nav.setPreview(4,Bitmap.createBitmap(2,2,Bitmap.Config.ARGB_8888)));assertFalse(nav.showingRecents());
  }
  @Test public void closingRemovesTouchableWindow()throws Exception{View before=root();ui(()->nav.close());assertFalse(before.isAttachedToWindow());assertNull(root());}
+ @Test public void repeatedHomeAndBackKeepTheSameOverlayWindow()throws Exception{
+  View before=root();ui(()->find(before,activity.getString(R.string.nav_home)).performClick());assertSame(before,root());
+  ui(()->find(before,activity.getString(R.string.nav_back)).performClick());assertSame(before,root());
+ }
+ @Test public void recentsButtonTogglesThePanelWithoutReloading()throws Exception{
+  ui(()->nav.showRecent(List.of()));View before=root();int revision=nav.revision();
+  ui(()->find(before,activity.getString(R.string.nav_recents)).performClick());assertFalse(nav.showingRecents());assertEquals(-1,action);assertTrue(nav.revision()>revision);
+ }
 }

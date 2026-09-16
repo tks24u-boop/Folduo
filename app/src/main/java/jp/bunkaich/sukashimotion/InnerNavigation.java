@@ -13,7 +13,7 @@ final class InnerNavigation {
     static final int SETTINGS=1000, PREVIEW=1001;
     interface Actions {void run(int action,int taskId);}
     private final Context context;private final WindowManager wm;private final Actions actions;
-    private View root;private volatile boolean recents;
+    private View root;private volatile boolean recents;private volatile int revision;
     private final Map<Integer,ImageView> previews=new HashMap<>();
     final int displayId,width,height;
     InnerNavigation(Context c,int display,int width,int height,Actions actions){context=c;displayId=display;this.width=width;this.height=height;this.actions=actions;wm=c.getSystemService(WindowManager.class);collapse();}
@@ -34,17 +34,18 @@ final class InnerNavigation {
         for(int i=0;i<keys.length;i++){
             int key=keys[i];NavButton button=new NavButton(context,key);button.setContentDescription(labels[i]);
             button.setOnClickListener(v->{
-                if(key==KeyEvent.KEYCODE_BACK&&recents){collapse();return;}
+                if((key==KeyEvent.KEYCODE_BACK||key==KeyEvent.KEYCODE_APP_SWITCH)&&recents){collapse();return;}
                 if(key!=KeyEvent.KEYCODE_APP_SWITCH)collapse();
                 actions.run(key,-1);
-            });row.addView(button,new LinearLayout.LayoutParams(0,dp(44),1));
+            });row.addView(button,new LinearLayout.LayoutParams(0,dp(48),1));
         }
         return row;
     }
-    private void collapse(){recents=false;previews.clear();replace(buttons(),Math.min(width-dp(24),dp(320)),dp(52));}
+    private void collapse(){if(!recents&&root!=null)return;revision++;recents=false;previews.clear();replace(buttons(),Math.min(width-dp(24),dp(320)),dp(56));}
     boolean showingRecents(){return recents;}
+    int revision(){return revision;}
     void showRecent(List<Bundle> apps){
-        recents=true;previews.clear();
+        revision++;recents=true;previews.clear();
         LinearLayout panel=new LinearLayout(context);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(14),dp(14),dp(14),dp(8));panel.setBackground(background(0xfa191c22,26));
         LinearLayout heading=new LinearLayout(context);heading.setGravity(Gravity.CENTER_VERTICAL);
         TextView title=new TextView(context);title.setText(context.getString(R.string.nav_recents));title.setTextSize(19);title.setTextColor(Color.WHITE);heading.addView(title,new LinearLayout.LayoutParams(0,dp(40),1));
@@ -62,11 +63,11 @@ final class InnerNavigation {
             card.setContentDescription(label);card.setClickable(true);card.setFocusable(true);card.setOnClickListener(v->{collapse();actions.run(0,task);});
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(cardWidth,dp(214));lp.setMargins(dp(3),dp(4),dp(3),dp(4));row.addView(card,lp);
         }
-        panel.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));panel.addView(buttons(),new LinearLayout.LayoutParams(-1,dp(52)));
+        panel.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));panel.addView(buttons(),new LinearLayout.LayoutParams(-1,dp(56)));
         replace(panel,panelWidth,Math.min(height-dp(100),dp(610)));
     }
     void setPreview(int task,Bitmap bitmap){ImageView view=previews.get(task);if(!recents||view==null)return;view.setScaleType(ImageView.ScaleType.FIT_CENTER);view.setImageBitmap(bitmap);}
-    void close(){recents=false;previews.clear();if(root!=null){wm.removeViewImmediate(root);root=null;}}
+    void close(){revision++;recents=false;previews.clear();if(root!=null){wm.removeViewImmediate(root);root=null;}}
     private static final class NavButton extends View {
         final int key;final Paint p=new Paint(3);final float density;
         NavButton(Context c,int key){super(c);this.key=key;density=c.getResources().getDisplayMetrics().density;setClickable(true);setFocusable(true);}

@@ -176,4 +176,20 @@
     <string name="home_setup">Folduoのホーム画面も使えます。開閉演出が有効なときは、選んだアプリを操作中の画面へ表示します。アイコンは長押しで入れ替えられます。</string>
     <string name="device_report">Device: %1$s / SDK %2$d / Build %3$s</string>
     <string name="display_geometry_changed">開閉中に画面の向きやサイズが変わったため、通常表示に戻しました。</string>
+    <string name="dashboard_subtitle">開閉アニメーション · いつものホームで使う</string>
+    <string name="dashboard_status">アニメーションの状態</string>
+    <string name="dashboard_start">開始</string>
+    <string name="dashboard_restart">再開</string>
+    <string name="dashboard_one_ui">One UIホームをお使いなら、標準のホームアプリはそのままで使えます。</string>
+    <string name="dashboard_privacy">開閉中だけ画面を一時取得します。画像の保存・送信はしません。</string>
+    <string name="dashboard_help">使い方・困ったとき</string>
+    <string name="dashboard_optional_home">任意：Folduo独自ホーム</string>
+    <string name="dashboard_optional_body">アプリを並べた別のホーム画面を試せます。One UIを使う場合、この設定は不要です。</string>
+    <string name="dashboard_requirements">Shizukuの許可：%1$s\n重ねて表示：%2$s</string>
+    <string name="dashboard_ready">許可済み</string>
+    <string name="dashboard_needed">未許可</string>
+    <string name="section_expanded">開いています</string>
+    <string name="section_collapsed">閉じています</string>
+    <string name="home_loading">アプリを読み込み中…</string>
+    <string name="home_no_matches">該当するアプリはありません</string>
 </resources>

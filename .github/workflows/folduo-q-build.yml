@@ -27,7 +27,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon :app:testDebugUnitTest :app:lintRelease :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest
-      - name: Test task routing on Android emulator
+      - name: Test routing, UI and responsiveness on Android emulator
         run: bash tools/test-task-router.sh
       - name: Build wallpaper helper
         run: |
@@ -36,18 +36,18 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist/wallpaper
-          cp app/build/outputs/apk/release/app-release.apk dist/Folduo-0.1.21-q3.apk
+          cp app/build/outputs/apk/release/app-release.apk dist/Folduo-0.1.21-q4.apk
           cp tools/cover-wallpaper.py tools/cover-wallpaper-setup.jar LICENSE dist/wallpaper/
           cp README.SM-F966Q.md dist/
           cd dist
           zip -r folduo-wallpaper-setup-q2.zip wallpaper
-          sha256sum Folduo-0.1.21-q3.apk folduo-wallpaper-setup-q2.zip > SHA256SUMS
+          sha256sum Folduo-0.1.21-q4.apk folduo-wallpaper-setup-q2.zip > SHA256SUMS
       - name: Save test build
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Folduo-SM-F966Q-q3
+          name: Folduo-SM-F966Q-q4
           path: |
-            dist/Folduo-0.1.21-q3.apk
+            dist/Folduo-0.1.21-q4.apk
             dist/folduo-wallpaper-setup-q2.zip
             dist/README.SM-F966Q.md
             dist/SHA256SUMS

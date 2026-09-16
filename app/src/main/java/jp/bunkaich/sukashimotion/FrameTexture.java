@@ -12,13 +12,17 @@ final class FrameTexture {
         input.prepareToDraw();Bitmap[] levels=new Bitmap[BlurCache.LEVELS.length];java.util.Arrays.fill(levels,input);return new FrameTexture(input,levels,false);
     }
     static FrameTexture prepare(Bitmap input,float density,BooleanSupplier cancelled){
+        if(cancelled.getAsBoolean())return null;
         Bitmap sharp=input.getConfig()==Bitmap.Config.HARDWARE?input.copy(Bitmap.Config.ARGB_8888,false):input;
-        if(sharp==null||cancelled.getAsBoolean())return null;
+        if(sharp==null)return null;
+        if(cancelled.getAsBoolean()){if(sharp!=input)sharp.recycle();return null;}
         float scale=Math.min(.25f,640f/Math.max(sharp.getWidth(),sharp.getHeight()));
         Bitmap small=Bitmap.createScaledBitmap(sharp,Math.max(1,Math.round(sharp.getWidth()*scale)),Math.max(1,Math.round(sharp.getHeight()*scale)),true);
         Bitmap[] levels=BlurCache.build(small,density*scale,cancelled);
         if(small!=sharp)small.recycle();
-        if(levels==null||cancelled.getAsBoolean())return null;
+        if(levels==null||cancelled.getAsBoolean()){
+            BlurCache.recycle(levels);if(sharp!=input)sharp.recycle();return null;
+        }
         sharp.prepareToDraw();return new FrameTexture(sharp,levels,true);
     }
     /** Opaque temporary destination made only from the current app. Replace with a real

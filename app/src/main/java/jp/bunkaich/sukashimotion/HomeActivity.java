@@ -16,15 +16,37 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
     static final float FRAME_RATE = 60f;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final ExecutorService launches = Executors.newSingleThreadExecutor();
     private SharedPreferences prefs;
     private HomeScene scene;
     private List<AppCatalog.App> apps = List.of();
     private AlertDialog drawer;
-    private boolean started, launching;
+    private boolean started, launching, appsDirty=true, loadingApps;
+    private int batteryLevel=-1, iconDensity;
+    private Runnable updateDrawer;
+    private final BroadcastReceiver packages=new BroadcastReceiver(){
+        @Override public void onReceive(Context context,Intent intent){
+            appsDirty=true;if(started)refreshApps();
+        }
+    };
+    private final BroadcastReceiver timeAndBattery=new BroadcastReceiver(){
+        @Override public void onReceive(Context context,Intent intent){
+            if(Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())){
+                int level=intent.getIntExtra(BatteryManager.EXTRA_LEVEL,-1);
+                int scale=intent.getIntExtra(BatteryManager.EXTRA_SCALE,100);
+                batteryLevel=level<0?-1:Math.round(level*100f/Math.max(1,scale));
+            }
+            main.removeCallbacks(clock);if(started)main.post(clock);
+        }
+    };
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences("launcher", MODE_PRIVATE);
+        iconDensity=getResources().getConfiguration().densityDpi;
+        IntentFilter packageFilter=new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
+        packageFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);packageFilter.addAction(Intent.ACTION_PACKAGE_CHANGED);packageFilter.addDataScheme("package");
+        registerReceiver(packages,packageFilter,Context.RECEIVER_NOT_EXPORTED);
         BridgeConnection.init(this);
         getWindow().setDecorFitsSystemWindows(false);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
@@ -56,7 +78,11 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
 
     @Override protected void onStart() {
         super.onStart(); started = true;
-        refreshApps(); main.post(clock);
+        refreshApps();
+        IntentFilter filter=new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        filter.addAction(Intent.ACTION_TIME_CHANGED);filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+        registerReceiver(timeAndBattery,filter,Context.RECEIVER_NOT_EXPORTED);
+        main.removeCallbacks(clock);main.post(clock);
     }
     @Override protected void onResume() {
         super.onResume();
@@ -65,10 +91,13 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
         if (MotionSettings.enabled(this)) BridgeConnection.connect(this);
         updatePanel();
     }
-    @Override protected void onStop() { started = false; main.removeCallbacks(clock); super.onStop(); }
-    @Override protected void onDestroy() { worker.shutdownNow(); super.onDestroy(); }
+    @Override protected void onStop() { started = false; main.removeCallbacks(clock); unregisterReceiver(timeAndBattery); super.onStop(); }
+    @Override protected void onDestroy() { unregisterReceiver(packages); if(drawer!=null)drawer.dismiss(); worker.shutdownNow(); launches.shutdownNow(); super.onDestroy(); }
     @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); if (drawer != null) drawer.dismiss(); }
-    @Override public void onConfigurationChanged(Configuration c) { super.onConfigurationChanged(c); updatePanel(); }
+    @Override public void onConfigurationChanged(Configuration c) {
+        super.onConfigurationChanged(c);updatePanel();
+        if(iconDensity!=c.densityDpi){iconDensity=c.densityDpi;appsDirty=true;if(started)refreshApps();}
+    }
 
     private void updatePanel() {
         Display display = getDisplay();
@@ -78,20 +107,27 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
         scene.setFold(ratio > .68f && !isInMultiWindowMode(), 0, false);
     }
     private void refreshApps() {
+        if(!appsDirty||loadingApps||isDestroyed())return;
+        appsDirty=false;loadingApps=true;
         worker.execute(() -> {
-            List<AppCatalog.App> loaded = AppCatalog.load(this);
-            List<AppCatalog.App> favorites = AppCatalog.favorites(loaded, prefs);
-            main.post(() -> { if (!isDestroyed()) { apps = loaded; scene.updateApps(favorites); } });
+            List<AppCatalog.App> loaded;
+            try{loaded=AppCatalog.load(this);}catch(RuntimeException e){loaded=null;}
+            final List<AppCatalog.App> result=loaded;
+            main.post(() -> {
+                loadingApps=false;if(isDestroyed())return;
+                if(result==null){appsDirty=true;return;}
+                // A package/configuration change during loading invalidates that result.
+                if(appsDirty){if(started)refreshApps();return;}
+                apps=result;scene.updateApps(AppCatalog.favorites(apps,prefs));
+                if(updateDrawer!=null)updateDrawer.run();
+            });
         });
     }
     private final Runnable clock = new Runnable() {
         public void run() {
             if (!started) return;
-            Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-            int level = battery == null ? -1 : battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-            int scale = battery == null ? 100 : battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
-            scene.tick(level < 0 ? -1 : Math.round(level * 100f / Math.max(1, scale)), prefs.getString("note", ""));
-            main.postDelayed(this, 1000);
+            scene.tick(batteryLevel,prefs.getString("note", ""));
+            main.postDelayed(this,60000-System.currentTimeMillis()%60000);
         }
     };
 
@@ -101,7 +137,8 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
         launching = true;
         int display = getDisplay().getDisplayId();
         IShellBridge bridge = BridgeConnection.bridge;
-        worker.execute(() -> {
+        // Starting an app must never wait behind icon/catalog loading.
+        launches.execute(() -> {
             boolean handled = false;
             String failure = null;
             try {
@@ -141,20 +178,34 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
             public long getItemId(int position) { return position; }
             public View getView(int position, View recycled, ViewGroup parent) {
                 AppCatalog.App app = filtered.get(position);
-                LinearLayout row = new LinearLayout(HomeActivity.this); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(dp(8), dp(8), dp(8), dp(8));
-                ImageView icon = new ImageView(HomeActivity.this); icon.setImageDrawable(app.icon()); row.addView(icon, new LinearLayout.LayoutParams(dp(40), dp(40)));
-                TextView label = new TextView(HomeActivity.this); label.setText(app.label()); label.setTextSize(16); label.setPadding(dp(16), 0, 0, 0); row.addView(label);
+                LinearLayout row;
+                if(recycled instanceof LinearLayout existing)row=existing;
+                else {
+                    row=new LinearLayout(HomeActivity.this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(8),dp(8),dp(8),dp(8));
+                    ImageView icon=new ImageView(HomeActivity.this);row.addView(icon,new LinearLayout.LayoutParams(dp(40),dp(40)));
+                    TextView label=new TextView(HomeActivity.this);label.setTextSize(16);label.setPadding(dp(16),0,0,0);label.setSingleLine();label.setEllipsize(TextUtils.TruncateAt.END);row.addView(label,new LinearLayout.LayoutParams(0,-2,1));
+                }
+                ((ImageView)row.getChildAt(0)).setImageDrawable(app.icon());
+                ((TextView)row.getChildAt(1)).setText(app.label());
                 return row;
             }
         };
         list.setAdapter(adapter);
+        TextView empty=new TextView(this);empty.setPadding(dp(8),dp(24),dp(8),dp(24));panel.addView(empty);list.setEmptyView(empty);
+        Locale locale=getResources().getConfiguration().getLocales().get(0);
+        Map<AppCatalog.App,String> names=new HashMap<>();
+        updateDrawer=()->{
+            String query=search.getText().toString().toLowerCase(locale);
+            filtered.clear();
+            for(AppCatalog.App app:apps)if(names.computeIfAbsent(app,a->a.label().toLowerCase(locale)).contains(query))filtered.add(app);
+            empty.setText(loadingApps?R.string.home_loading:R.string.home_no_matches);adapter.notifyDataSetChanged();
+        };
+        updateDrawer.run();
         search.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s,int start,int count,int after) {}
             public void afterTextChanged(Editable e) {}
             public void onTextChanged(CharSequence s,int start,int before,int count) {
-                String query = s.toString().toLowerCase(getResources().getConfiguration().getLocales().get(0));
-                filtered.clear(); for (AppCatalog.App app : apps) if (app.label().toLowerCase(getResources().getConfiguration().getLocales().get(0)).contains(query)) filtered.add(app);
-                adapter.notifyDataSetChanged();
+                if(updateDrawer!=null)updateDrawer.run();
             }
         });
         drawer = new AlertDialog.Builder(this).setTitle(slot < 0 ? R.string.home_drawer_title : R.string.home_choose).setView(panel).setNegativeButton(R.string.close, null).create();
@@ -163,6 +214,7 @@ public final class HomeActivity extends Activity implements HomeScene.Actions {
             if (slot < 0) launch(app);
             else { prefs.edit().putString("slot_" + slot, app.component().flattenToString()).apply(); scene.updateApps(AppCatalog.favorites(apps, prefs)); }
         });
+        drawer.setOnDismissListener(d->updateDrawer=null);
         drawer.show(); drawer.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
     }
     @Override public void note() {

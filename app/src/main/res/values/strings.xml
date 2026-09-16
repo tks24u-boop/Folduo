@@ -177,4 +177,20 @@
     <string name="home_setup">Folduo includes a home screen with app icons. While fold animation is active, it opens selected apps on the screen you are using. Long-press an icon to change it.</string>
     <string name="device_report">Device: %1$s / SDK %2$d / Build %3$s</string>
     <string name="display_geometry_changed">The display rotated or changed size during the transition. Normal display restored.</string>
+    <string name="dashboard_subtitle">Fold animation · Keep your usual home screen</string>
+    <string name="dashboard_status">Animation status</string>
+    <string name="dashboard_start">Start</string>
+    <string name="dashboard_restart">Restart</string>
+    <string name="dashboard_one_ui">Using One UI Home? Keep it as your default home app.</string>
+    <string name="dashboard_privacy">Temporarily reads the screen during folding. Images stay in memory; they are never saved or sent.</string>
+    <string name="dashboard_help">How to use and recover</string>
+    <string name="dashboard_optional_home">Optional: Folduo Home</string>
+    <string name="dashboard_optional_body">Try a separate home screen with app shortcuts. This is optional; One UI users can skip this section.</string>
+    <string name="dashboard_requirements">Shizuku permission: %1$s\nDisplay over other apps: %2$s</string>
+    <string name="dashboard_ready">Granted</string>
+    <string name="dashboard_needed">Needed</string>
+    <string name="section_expanded">Expanded</string>
+    <string name="section_collapsed">Collapsed</string>
+    <string name="home_loading">Loading apps…</string>
+    <string name="home_no_matches">No matching apps</string>
 </resources>

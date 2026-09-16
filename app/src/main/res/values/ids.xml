@@ -1,3 +1,10 @@
 <resources>
     <item name="language_button" type="id"/>
+    <item name="dashboard_status" type="id"/>
+    <item name="motion_start" type="id"/>
+    <item name="motion_stop" type="id"/>
+    <item name="setup_section" type="id"/>
+    <item name="help_section" type="id"/>
+    <item name="launcher_section" type="id"/>
+    <item name="diagnostics_section" type="id"/>
 </resources>

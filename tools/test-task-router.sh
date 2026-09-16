@@ -33,6 +33,17 @@ done
 if [[ "$router_booted" != true ]]; then tail -80 "$router_reports/emulator.log"; exit 1; fi
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb shell am instrument -w -r -e class jp.bunkaich.sukashimotion.TaskDisplayRouterTest jp.bunkaich.sukashimotion.test/androidx.test.runner.AndroidJUnitRunner | tee "$router_reports/instrumentation.txt"
+adb shell appops set jp.bunkaich.sukashimotion SYSTEM_ALERT_WINDOW allow
+adb shell wm dismiss-keyguard
+adb shell am instrument -w -r -e class jp.bunkaich.sukashimotion.TaskDisplayRouterTest,jp.bunkaich.sukashimotion.HomeInteractionTest,jp.bunkaich.sukashimotion.InnerNavigationTest,jp.bunkaich.sukashimotion.UiOptimizationTest,jp.bunkaich.sukashimotion.NavigationResponseTest,jp.bunkaich.sukashimotion.LanguageTest#pickerSwitchesBothWaysAndFollowsSystemAgain jp.bunkaich.sukashimotion.test/androidx.test.runner.AndroidJUnitRunner | tee "$router_reports/instrumentation.txt"
 # am instrument may return zero even when a test fails or the process crashes.
 grep -Eq '^OK \([0-9]+ tests?\)' "$router_reports/instrumentation.txt"
+
+# Synthetic emulator screenshots, not user/device data. Keep images in reports and
+# emit compact JPEGs so the review can inspect the exact CI build from job logs.
+for panel in cover inner; do
+    adb pull "/sdcard/Android/data/jp.bunkaich.sukashimotion/files/dashboard-$panel.jpg" "$router_reports/dashboard-$panel.jpg"
+    printf 'FOLDUO_UI_%s=' "$panel"
+    base64 -w0 "$router_reports/dashboard-$panel.jpg"
+    printf '\n'
+done

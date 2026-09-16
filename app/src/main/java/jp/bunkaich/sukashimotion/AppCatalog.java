@@ -30,16 +30,18 @@ final class AppCatalog {
         // Stable slot ids, including gaps: uninstalling an app must not reorder the home screen.
         String[] preferred={"camera","chrome","gallery","calendar","messaging","gmail","maps","youtube","clock","settings","notes","calculator","photos","music","files","kotobamado"};
         HashSet<String> used=new HashSet<>();
+        SharedPreferences.Editor defaults=prefs.edit();boolean changed=false;
         for(int slot=0;slot<16;slot++) {
             String saved=prefs.getString("slot_"+slot,null); App found=null;
             if(saved!=null) { for(App app:all)if(app.component.flattenToString().equals(saved)){found=app;break;} }
             else {
                 for(App app:all)if(!used.contains(app.component.flattenToString())&&app.component.getPackageName().toLowerCase(Locale.ROOT).contains(preferred[slot])){found=app;break;}
                 if(found==null)for(App app:all)if(!used.contains(app.component.flattenToString())){found=app;break;}
-                if(found!=null)prefs.edit().putString("slot_"+slot,found.component.flattenToString()).apply();
+                if(found!=null){defaults.putString("slot_"+slot,found.component.flattenToString());changed=true;}
             }
             picks.add(found);if(found!=null)used.add(found.component.flattenToString());
         }
+        if(changed)defaults.apply();
         return picks;
     }
 }

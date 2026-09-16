@@ -22,12 +22,12 @@ public final class MotionService extends Service implements DisplayManager.Displ
     private final List<Panel> panels=new ArrayList<>();private final List<Layer> layers=new ArrayList<>();
     private final Map<Boolean,FrameTexture> frozen=new HashMap<>();
     private volatile List<Anchor> anchors=List.of();
-    private volatile int generation,sessionSerial;private volatile boolean stopped;private boolean paused=true,busy,frameScheduled,blockedUntilEndpoint,finishing;private String panelSignature="";
+    private volatile int generation,sessionSerial,navigationRequest;private volatile boolean stopped,fastPolling;private boolean paused=true,busy,frameScheduled,blockedUntilEndpoint,finishing;private String panelSignature="";
     private long angleStartedAt,angleSession,retryAt;private int recoveries;private UiText lastRecovery=UiText.raw("");private String notificationText="";
     private boolean layoutPrepared,layoutPreparing,layoutRecovering,fixedPrimaryInner;
     private final HandoffQueue directionQueue=new HandoffQueue();private int expectedTaskId=-1;
     private IShellBridge bound;private FoldPolicy policy;private float target=Float.NaN,smoothed=Float.NaN;
-    private LocaleList uiLocales;private InnerNavigation navigation;private String navigationError="";
+    private LocaleList uiLocales;private volatile InnerNavigation navigation;private String navigationError="";
     private long measuredAt,lastFrame;private int source=-1;private DisplayManager displays;
     private final ArrayDeque<String> angleHistory=new ArrayDeque<>();
     private long layerSerial;private long acceptedAngles;private String anchorError="",stage="idle";
@@ -52,8 +52,15 @@ public final class MotionService extends Service implements DisplayManager.Displ
         displays=getSystemService(DisplayManager.class);displays.registerDisplayListener(this,main);
         IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);registerReceiver(power,filter,Context.RECEIVER_NOT_EXPORTED);
         BridgeConnection.init(this);
-        poller.scheduleWithFixedDelay(()->{for(Anchor a:anchors)try{IBinder token=a.view.getWindowToken();if(token!=null)a.wallpaper.sendWallpaperCommand(token,BuildConfig.APPLICATION_ID+".READ_ANGLE",0,0,0,null);}catch(Exception ignored){}},0,16,TimeUnit.MILLISECONDS);
+        poller.execute(this::pollAngles);
         main.post(health);
+    }
+    private void pollAngles(){
+        if(stopped)return;
+        List<Anchor> current=anchors;
+        for(Anchor a:current)try{IBinder token=a.view.getWindowToken();if(token!=null)a.wallpaper.sendWallpaperCommand(token,BuildConfig.APPLICATION_ID+".READ_ANGLE",0,0,0,null);}catch(Exception ignored){}
+        // Keep transition sampling unchanged; avoid 60 wake-ups/sec while idle or locked.
+        if(!stopped)try{poller.schedule(this::pollAngles,current.isEmpty()?250:fastPolling?16:33,TimeUnit.MILLISECONDS);}catch(RejectedExecutionException ignored){}
     }
     @Override public void onConfigurationChanged(android.content.res.Configuration config){
         super.onConfigurationChanged(config);
@@ -114,6 +121,7 @@ public final class MotionService extends Service implements DisplayManager.Displ
         // endpoint dwell; repeatedly replaying a stale report invented completion.
         // Fine direct sensors may be on-change, so a recent sample may be held briefly.
         if(!paused&&layoutPrepared&&source>=2&&now-measuredAt<=250&&policy!=null&&policy.active&&Float.isFinite(target))handle(policy.update(target,now));
+        fastPolling=!paused&&(busy||finishing||policy!=null&&policy.active);
         updateNavigation();updateNotification();main.postDelayed(this,100);
     }};
     private void startAngles(IShellBridge bridge){
@@ -182,6 +190,7 @@ public final class MotionService extends Service implements DisplayManager.Displ
         main.postDelayed(()->awaitRecoveredLayout(session,attempt+1),40);
     }
     private void handle(FoldPolicy.Change change){
+        fastPolling=busy||finishing||policy!=null&&policy.active;
         switch(change){case OPEN -> transition(true);case CLOSE -> transition(false);case FINISH_OPEN,FINISH_CLOSED -> finish();default -> {}}
     }
     private void transition(boolean opening){
@@ -394,13 +403,13 @@ public final class MotionService extends Service implements DisplayManager.Displ
         }catch(Exception e){navigationError=ShellBridge.message(e);}
     }
     private void navigate(int action,int taskId){
-        IShellBridge bridge=bound;InnerNavigation owner=navigation;int session=sessionSerial,ticket=generation;
+        IShellBridge bridge=bound;InnerNavigation owner=navigation;int session=sessionSerial,ticket=generation,request=++navigationRequest;
         if(bridge==null||owner==null||busy||finishing)return;
         controls.execute(()->{try{
-            if(stopped||session!=sessionSerial||ticket!=generation)return;
+            if(stopped||session!=sessionSerial||ticket!=generation||action==KeyEvent.KEYCODE_APP_SWITCH&&request!=navigationRequest)return;
             Bundle result=bridge.navigate(owner.displayId,action,taskId);
             main.post(()->{
-                if(stopped||session!=sessionSerial||ticket!=generation||navigation!=owner)return;
+                if(stopped||session!=sessionSerial||ticket!=generation||navigation!=owner||request!=navigationRequest)return;
                 if(!result.getBoolean("ok")){navigationError=result.getString("error");android.widget.Toast.makeText(this,getString(R.string.navigation_failed,UiText.raw(navigationError).resolve(this)),android.widget.Toast.LENGTH_SHORT).show();return;}
                 navigationError="";
                 if(action==KeyEvent.KEYCODE_APP_SWITCH){
@@ -409,20 +418,30 @@ public final class MotionService extends Service implements DisplayManager.Displ
                     if(apps!=null)loadRecentPreviews(owner,apps,session);
                 }
             });
-        }catch(Exception e){main.post(()->{if(session==sessionSerial&&ticket==generation&&navigation==owner)navigationError=ShellBridge.message(e);});}});
+        }catch(Exception e){main.post(()->{if(session==sessionSerial&&ticket==generation&&navigation==owner&&request==navigationRequest)navigationError=ShellBridge.message(e);});}});
     }
     private void loadRecentPreviews(InnerNavigation owner,List<Bundle> apps,int session){
+        loadRecentPreview(owner,apps,session,owner.revision(),0);
+    }
+    private boolean previewCurrent(InnerNavigation owner,int session,int revision){
+        return !stopped&&session==sessionSerial&&navigation==owner&&owner.showingRecents()&&owner.revision()==revision;
+    }
+    private void loadRecentPreview(InnerNavigation owner,List<Bundle> apps,int session,int revision,int index){
+        if(index>=apps.size()||!previewCurrent(owner,session,revision))return;
         IShellBridge bridge=bound;
+        // Enqueue one thumbnail at a time. HOME/BACK and display transfers queued
+        // during a capture run before the next thumbnail, without a second binder race.
         controls.execute(()->{
-            for(Bundle app:apps){
-                if(stopped||session!=sessionSerial||navigation!=owner||!owner.showingRecents())return;
-                try{
-                    int task=app.getInt("taskId",-1);
-                    Bundle result=bridge.navigate(1,InnerNavigation.PREVIEW,task);
-                    Bitmap image=result.getParcelable("preview",Bitmap.class);
-                    if(image!=null)main.post(()->{if(!stopped&&session==sessionSerial&&navigation==owner)owner.setPreview(task,image);});
-                }catch(Exception ignored){} // An unavailable/protected preview leaves the app icon.
-            }
+            if(!previewCurrent(owner,session,revision))return;
+            Bitmap image=null;int task=apps.get(index).getInt("taskId",-1);
+            try{image=bridge.navigate(owner.displayId,InnerNavigation.PREVIEW,task).getParcelable("preview",Bitmap.class);}
+            catch(Exception ignored){} // Protected/unavailable previews retain the icon.
+            Bitmap ready=image;
+            main.post(()->{
+                if(!previewCurrent(owner,session,revision))return;
+                if(ready!=null)owner.setPreview(task,ready);
+                loadRecentPreview(owner,apps,session,revision,index+1);
+            });
         });
     }
     private void removeNavigation(){if(navigation!=null){try{navigation.close();}catch(Exception ignored){}navigation=null;}}
