@@ -35,7 +35,8 @@ def main():
         classes.mkdir()
         subprocess.run([javac, '--release', '17', '-encoding', 'UTF-8', '-cp', str(android),
                         '-d', str(classes), str(tools / 'CoverWallpaperSetup.java'),
-                        str(tools.parent / 'app/src/main/java/jp/bunkaich/sukashimotion/DeviceProfile.java')], check=True)
+                        str(tools.parent / 'app/src/main/java/jp/bunkaich/sukashimotion/DeviceProfile.java'),
+                        str(tools.parent / 'app/src/main/java/jp/bunkaich/sukashimotion/WallpaperProfile.java')], check=True)
         class_jar = temp / 'classes.jar'
         with zipfile.ZipFile(class_jar, 'w') as archive:
             for file in sorted(classes.rglob('*.class')):

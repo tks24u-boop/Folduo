@@ -1,3 +1,4 @@
+import jp.bunkaich.sukashimotion.WallpaperProfile;
 import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
 import android.app.wallpaper.WallpaperDescription;
@@ -11,7 +12,6 @@ import java.lang.reflect.Method;
 public final class CoverWallpaperSetup {
     private static final int COVER_HOME = 17;
     private static final String RESOURCE_PACKAGE = "com.samsung.android.wallpaper.res";
-    private static final String STOCK_URI = "android.resource://" + RESOURCE_PACKAGE + "/drawable/sub_wallpaper_002.png";
     private static final ComponentName LIVE = new ComponentName("com.samsung.android.wallpaper.live",
             "com.samsung.android.wallpaper.live.fold.FoldInteractive");
 
@@ -20,9 +20,9 @@ public final class CoverWallpaperSetup {
         catch (Throwable error) { error.printStackTrace(); System.exit(1); }
     }
 
-    private static boolean angleVideo(Bundle extras) {
-        return extras != null && extras.getBundle("serviceSettings") != null
-                && "video_002.mp4".equals(extras.getBundle("serviceSettings").getString("filename"));
+    private static String video(Bundle extras) {
+        Bundle settings = extras == null ? null : extras.getBundle("serviceSettings");
+        return settings == null ? null : settings.getString("filename");
     }
 
     private static Method exactApply(Class<?> api) {
@@ -55,34 +55,49 @@ public final class CoverWallpaperSetup {
         Object uri = WallpaperManager.class.getMethod("semGetUri", int.class).invoke(manager, COVER_HOME);
         WallpaperInfo info = (WallpaperInfo) WallpaperManager.class.getMethod("getWallpaperInfo", int.class, int.class)
                 .invoke(manager, COVER_HOME, 0);
-        boolean stock = STOCK_URI.equals(String.valueOf(uri)) && (info == null ||
-                "com.android.systemui.wallpapers.ImageWallpaper".equals(info.getComponent().getClassName()));
-        boolean live = info != null && LIVE.equals(info.getComponent())
-                && angleVideo((Bundle) getExtras.invoke(manager, COVER_HOME, 0));
-        System.out.println("Cover home: " + (live ? "angle-aware stock video" : stock ? "original stock image" : "other wallpaper"));
-        System.out.println("Device: " + Build.MODEL + " / SDK " + Build.VERSION.SDK_INT + " / " + Build.DISPLAY);
         WallpaperInfo innerInfo = (WallpaperInfo) WallpaperManager.class.getMethod("getWallpaperInfo", int.class, int.class)
                 .invoke(manager, 5, 0);
         Bundle innerExtras = (Bundle) getExtras.invoke(manager, 5, 0);
-        boolean innerReady = innerInfo != null && LIVE.equals(innerInfo.getComponent()) && angleVideo(innerExtras);
+        String innerVideo = video(innerExtras);
+        String innerVariant = innerInfo != null && LIVE.equals(innerInfo.getComponent())
+                ? WallpaperProfile.variant(innerVideo) : null;
+        String coverVideo = video((Bundle) getExtras.invoke(manager, COVER_HOME, 0));
+        String coverVariant = info != null && LIVE.equals(info.getComponent())
+                ? WallpaperProfile.variant(coverVideo) : null;
+        boolean innerReady = innerVariant != null;
+        boolean live = coverVariant != null;
+        // Restore follows the current cover video even if the user changed the inner wallpaper.
+        String selectedVariant = action.equals("restore-stock") && live ? coverVariant : innerVariant;
+        boolean stock = WallpaperProfile.matchesStock(String.valueOf(uri), selectedVariant) && (info == null ||
+                "com.android.systemui.wallpapers.ImageWallpaper".equals(info.getComponent().getClassName()));
+        System.out.println("Helper version: q2 (stock pairs 002 / 004)");
+        System.out.println("Cover home: " + (live ? "angle-aware stock video" : stock ? "original stock image" : "other wallpaper"));
+        System.out.println("Cover URI: " + uri + " / video: " + coverVideo);
+        System.out.println("Device: " + Build.MODEL + " / SDK " + Build.VERSION.SDK_INT + " / " + Build.DISPLAY);
+        System.out.println("Inner component: " + (innerInfo == null ? "none" : innerInfo.getComponent()));
+        System.out.println("Inner video: " + innerVideo + " / selected pair: " + selectedVariant);
         Class<?> preflightApi = Class.forName("android.app.IWallpaperManager");
         Method applyMethod = exactApply(preflightApi), restoreMethod = exactRestore(preflightApi);
         int stockResource = 0;
         try {
             Context stockContext = context.createPackageContext(RESOURCE_PACKAGE, 0);
-            stockResource = stockContext.getResources().getIdentifier("sub_wallpaper_002", "drawable", RESOURCE_PACKAGE);
+            stockResource = selectedVariant == null ? 0 : stockContext.getResources().getIdentifier(WallpaperProfile.resource(selectedVariant), "drawable", RESOURCE_PACKAGE);
         } catch (android.content.pm.PackageManager.NameNotFoundException missing) { }
         System.out.println("Inner angle wallpaper: " + innerReady);
         System.out.println("Stock image resource: " + (stockResource != 0));
         System.out.println("Exact apply API: " + (applyMethod != null) + " / restore API: " + (restoreMethod != null));
         System.out.println("Wallpaper diagnostics only; Q hardware validation is pending.");
         if (action.equals("status")) return;
+        if (action.equals("apply") && !innerReady)
+            throw new IllegalStateException("Expected inner FoldInteractive video_002.mp4 or video_004.mp4; no change made");
+        if (action.equals("apply") && live && !coverVariant.equals(innerVariant))
+            throw new IllegalStateException("Inner and cover video differ; restore the cover before changing pairs");
         if ((!stock && !live)) throw new IllegalStateException("Wallpaper changed since setup; refusing to overwrite it");
         if (action.equals("apply") && live || action.equals("restore-stock") && stock) {
             System.out.println("Already configured; no change made"); return;
         }
         Context resources = context.createPackageContext(RESOURCE_PACKAGE, 0);
-        int id = resources.getResources().getIdentifier("sub_wallpaper_002", "drawable", RESOURCE_PACKAGE);
+        int id = resources.getResources().getIdentifier(WallpaperProfile.resource(selectedVariant), "drawable", RESOURCE_PACKAGE);
         if (id == 0) throw new IllegalStateException("Original stock image unavailable; no change made");
         byte[] bytes;
         try (InputStream input = resources.getResources().openRawResource(id)) { bytes = input.readAllBytes(); }
@@ -107,7 +122,7 @@ public final class CoverWallpaperSetup {
         } else {
             Method setter = restoreMethod;
             if (setter == null) throw new IllegalStateException("Expected wallpaper restore setter unavailable");
-            Bundle extras = new Bundle(); extras.putString("uri", STOCK_URI); extras.putBoolean("isPreloaded", true);
+            Bundle extras = new Bundle(); extras.putString("uri", WallpaperProfile.uri(selectedVariant)); extras.putBoolean("isPreloaded", true);
             ParcelFileDescriptor file = (ParcelFileDescriptor) setter.invoke(remote, null, context.getPackageName(),
                     new WallpaperDescription.Builder().build(), false, new Bundle(), COVER_HOME, null, 0, 0, true, extras);
             if (file == null) throw new IllegalStateException("Wallpaper restore did not return a writable file");

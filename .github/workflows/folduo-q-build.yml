@@ -38,17 +38,31 @@ jobs:
           cp tools/cover-wallpaper.py tools/cover-wallpaper-setup.jar LICENSE dist/wallpaper/
           cp README.SM-F966Q.md dist/
           cd dist
-          zip -r folduo-wallpaper-setup-q1.zip wallpaper
-          sha256sum Folduo-0.1.21-q1.apk folduo-wallpaper-setup-q1.zip > SHA256SUMS
+          zip -r folduo-wallpaper-setup-q2.zip wallpaper
+          sha256sum Folduo-0.1.21-q1.apk folduo-wallpaper-setup-q2.zip > SHA256SUMS
       - name: Save test build
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: Folduo-SM-F966Q-experimental
           path: |
             dist/Folduo-0.1.21-q1.apk
-            dist/folduo-wallpaper-setup-q1.zip
+            dist/folduo-wallpaper-setup-q2.zip
             dist/README.SM-F966Q.md
             dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+      - name: Package q2 helper separately
+        run: |
+          mkdir -p helper-q2/wallpaper
+          cp tools/cover-wallpaper.py tools/cover-wallpaper-setup.jar LICENSE helper-q2/wallpaper/
+          cp README.SM-F966Q.md helper-q2/
+          cd helper-q2
+          sha256sum wallpaper/cover-wallpaper.py wallpaper/cover-wallpaper-setup.jar > SHA256SUMS
+      - name: Save q2 helper
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Folduo-wallpaper-helper-q2
+          path: helper-q2/
           if-no-files-found: error
           retention-days: 30
       - name: Save reports
