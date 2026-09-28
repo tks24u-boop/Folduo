@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>KIOXIA SHOCK</title>
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": {
+  "three": "/node_modules/three/build/three.module.js",
+  "three/addons/": "/node_modules/three/examples/jsm/",
+  "opentype": "/node_modules/opentype.js/dist/opentype.mjs"
+} }
+</script>
+</head>
+<body>
+<script>window.addEventListener("error", (e) => { window.initError = window.initError || ("module error: " + e.message); });</script>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
