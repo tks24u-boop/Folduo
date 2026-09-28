@@ -120,7 +120,7 @@ export default {
     const capRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.0, 96), capRingMat); gB.add(capRing);
 
     // gachiho text
-    const goldMat = new THREE.MeshPhysicalMaterial({ color: 0xffe2a0, emissive: 0x5a3a00, emissiveIntensity: 1.0, metalness: 1, roughness: 0.16, clearcoat: 1, envMap, envMapIntensity: 1.8 });
+    const goldMat = new THREE.MeshPhysicalMaterial({ color: 0xffd98a, emissive: 0x6a4000, emissiveIntensity: 0.55, metalness: 1, roughness: 0.16, clearcoat: 1, envMap, envMapIntensity: 0.8 });
     const whiteMat = new THREE.MeshPhysicalMaterial({ color: 0xdde6ff, emissive: 0x334466, emissiveIntensity: 0.5, metalness: 0.9, roughness: 0.2, clearcoat: 1, envMap, envMapIntensity: 0.9 });
     const t1 = makeText3D(assets.fonts.dela, 'それでも', { size: 0.9, depth: 0.3, bevel: 0.03, material: new THREE.MeshStandardMaterial({ color: 0x9aa4b8, metalness: 0.2, roughness: 0.6, emissive: 0x101828 }) });
     const t2 = makeText3D(assets.fonts.dela, 'ガチホが正義。', { size: 1.25, depth: 0.4, bevel: 0.04, material: goldMat });
@@ -165,7 +165,7 @@ export default {
           fx.flash = hit(t, T_SLAM, 12) * 0.95; fx.flashColor = [1, 0.25, 0.2];
           fx.shake = hit(t, T_SLAM, 4) * 0.55; fx.shakeRot = hit(t, T_SLAM, 5) * 0.04;
           fx.chroma = 3 + hit(t, T_SLAM, 4) * 32; fx.radialBlur = hit(t, T_SLAM, 6) * 0.5;
-          fx.bloom = 0.8 + hit(t, T_SLAM, 3) * 0.6; fx.bloomThreshold = 0.6; fx.vignette = 0.7; fx.tint = [1.05, 0.9, 0.9];
+          fx.bloom = 0.5 + hit(t, T_SLAM, 3) * 0.8; fx.bloomThreshold = 0.9; fx.vignette = 0.7; fx.tint = [1.05, 0.9, 0.9];
           // joke micro-hit
           fx.shake += hit(t, T_JOKE, 10) * 0.1;
           return;
@@ -222,7 +222,7 @@ export default {
             fx.flash += hit(t, T_GACHI, 9) * 0.8; fx.flashColor = [1, 0.9, 0.6];
             fx.shake += hit(t, T_GACHI, 5) * 0.35; fx.shakeRot = hit(t, T_GACHI, 6) * 0.02;
             fx.chroma += hit(t, T_GACHI, 4) * 24; fx.radialBlur = hit(t, T_GACHI, 6) * 0.35;
-            fx.bloom = 0.8 + hit(t, T_GACHI, 3) * 0.5;
+            fx.bloom = 0.55 + hit(t, T_GACHI, 3) * 0.5;
             // push coin+craft down/back so text sits clear
             const d = easeOutExpo(seg(t, T_GACHI, T_GACHI + 0.4));
             coinG.position.y -= d * 2.6; craft.position.y -= d * 2.6;
