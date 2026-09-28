@@ -1,0 +1,249 @@
+{
+  "params": {
+    "length": 200.0,
+    "depth": 116.0,
+    "height": 46.0,
+    "draft": 7.0,
+    "r_plan": 20.0,
+    "r_top": 9.0,
+    "ch_bottom": 1.2,
+    "slot_w": 26.0,
+    "z_floor": 11.0,
+    "r_mouth": 3.0,
+    "r_slot_end": 2.0,
+    "ch_w": 13.0,
+    "ch_h": 8.9,
+    "ch_chamfer": 6.4,
+    "ch_turn_r": 9.0,
+    "liner_len": 48.0,
+    "liner_x": 66.0,
+    "liner_clr": 0.05,
+    "liner_recess": 2.0,
+    "liner_floor": 3.0,
+    "membrane_t": 1.2,
+    "air_gap": 0.8,
+    "rib_w": 2.0,
+    "bump_r": 1.0,
+    "bump_interference": 0.1,
+    "lead_in": 0.8,
+    "peg_dx": 14.0,
+    "peg_neck_d": 5.0,
+    "peg_head_d": 6.1,
+    "peg_h": 2.55,
+    "foot_pocket_d": 13.3,
+    "foot_pocket_h": 1.5,
+    "foot_d": 13.0,
+    "foot_t": 3.0,
+    "foot_inset_x": 22.0,
+    "foot_inset_y": 18.0,
+    "logo_u": 2.5,
+    "logo_z": 19.5,
+    "logo_t": 2.4,
+    "logo_clr": 0.2,
+    "logo_eye_t": 0.6,
+    "logo_back_chamfer": 1.4,
+    "text_px": 0.9,
+    "text_depth": 0.4
+  },
+  "parts": {
+    "body": {
+      "volume_cm3": 770.06,
+      "size_mm": [
+        199.71,
+        115.71,
+        46.0
+      ],
+      "watertight": true
+    },
+    "body_no_logo": {
+      "volume_cm3": 771.78,
+      "size_mm": [
+        199.71,
+        115.71,
+        46.0
+      ],
+      "watertight": true
+    },
+    "liner_air": {
+      "volume_cm3": 19.92,
+      "size_mm": [
+        48.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
+    "liner_neo": {
+      "volume_cm3": 18.05,
+      "size_mm": [
+        48.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
+    "liner_pro14": {
+      "volume_cm3": 14.01,
+      "size_mm": [
+        48.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
+    "liner_pro16": {
+      "volume_cm3": 12.22,
+      "size_mm": [
+        48.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
+    "liner_m1air": {
+      "volume_cm3": 14.51,
+      "size_mm": [
+        48.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
+    "foot_tpu": {
+      "volume_cm3": 0.39,
+      "size_mm": [
+        13.0,
+        13.0,
+        3.0
+      ],
+      "watertight": true
+    },
+    "cable_grommet_1x": {
+      "volume_cm3": 0.69,
+      "size_mm": [
+        13.3,
+        8.7,
+        12.0
+      ],
+      "watertight": true
+    },
+    "cable_grommet_2x": {
+      "volume_cm3": 0.61,
+      "size_mm": [
+        13.3,
+        8.7,
+        12.0
+      ],
+      "watertight": true
+    },
+    "logo_orange": {
+      "volume_cm3": 1.61,
+      "size_mm": [
+        40.0,
+        25.0,
+        2.4
+      ],
+      "watertight": true
+    },
+    "logo_eyes": {
+      "volume_cm3": 0.01,
+      "size_mm": [
+        20.0,
+        5.0,
+        0.6
+      ],
+      "watertight": true
+    },
+    "logo_single_color": {
+      "volume_cm3": 1.55,
+      "size_mm": [
+        40.0,
+        25.0,
+        2.4
+      ],
+      "watertight": true
+    },
+    "logo_eye_peg": {
+      "volume_cm3": 0.03,
+      "size_mm": [
+        2.4,
+        4.9,
+        2.4
+      ],
+      "watertight": true
+    }
+  },
+  "fit": [
+    {
+      "model": "MacBook Neo (2026)",
+      "thickness": 12.75,
+      "liner": "neo",
+      "bump_gap_at_floor": 12.55,
+      "squeeze_per_side": 0.1,
+      "membrane_travel_left": 0.7,
+      "port_side_overhang": 48.8,
+      "top_above_desk": 221.9
+    },
+    {
+      "model": "MacBook Air 13 (M2-M5)",
+      "thickness": 11.3,
+      "liner": "air",
+      "bump_gap_at_floor": 11.25,
+      "squeeze_per_side": 0.025,
+      "membrane_travel_left": 0.775,
+      "port_side_overhang": 52.1,
+      "top_above_desk": 230.5
+    },
+    {
+      "model": "MacBook Air 15 (M2-M5)",
+      "thickness": 11.5,
+      "liner": "air",
+      "bump_gap_at_floor": 11.25,
+      "squeeze_per_side": 0.125,
+      "membrane_travel_left": 0.675,
+      "port_side_overhang": 70.2,
+      "top_above_desk": 253.1
+    },
+    {
+      "model": "MacBook Air 13 (M1, wedge)",
+      "thickness": 16.1,
+      "liner": "m1air",
+      "bump_gap_at_floor": 15.85,
+      "squeeze_per_side": 0.125,
+      "membrane_travel_left": 0.675,
+      "port_side_overhang": 52.1,
+      "top_above_desk": 227.9
+    },
+    {
+      "model": "MacBook Pro 13 (M1/M2)",
+      "thickness": 15.6,
+      "liner": "pro14",
+      "bump_gap_at_floor": 15.35,
+      "squeeze_per_side": 0.125,
+      "membrane_travel_left": 0.675,
+      "port_side_overhang": 52.1,
+      "top_above_desk": 227.9
+    },
+    {
+      "model": "MacBook Pro 14 (2021-2026)",
+      "thickness": 15.5,
+      "liner": "pro14",
+      "bump_gap_at_floor": 15.35,
+      "squeeze_per_side": 0.075,
+      "membrane_travel_left": 0.725,
+      "port_side_overhang": 56.3,
+      "top_above_desk": 236.7
+    },
+    {
+      "model": "MacBook Pro 16 (2021-2026)",
+      "thickness": 16.8,
+      "liner": "pro16",
+      "bump_gap_at_floor": 16.6,
+      "squeeze_per_side": 0.1,
+      "membrane_travel_left": 0.7,
+      "port_side_overhang": 77.8,
+      "top_above_desk": 263.6
+    }
+  ],
+  "logo_colour": "#D77757"
+}
