@@ -73,10 +73,28 @@
       ],
       "watertight": true
     },
+    "liner_air_test": {
+      "volume_cm3": 6.82,
+      "size_mm": [
+        16.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
     "liner_neo": {
       "volume_cm3": 18.05,
       "size_mm": [
         48.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
+    "liner_neo_test": {
+      "volume_cm3": 6.2,
+      "size_mm": [
+        16.0,
         25.9,
         33.0
       ],
@@ -91,6 +109,15 @@
       ],
       "watertight": true
     },
+    "liner_pro14_test": {
+      "volume_cm3": 4.85,
+      "size_mm": [
+        16.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
     "liner_pro16": {
       "volume_cm3": 12.22,
       "size_mm": [
@@ -100,10 +127,28 @@
       ],
       "watertight": true
     },
+    "liner_pro16_test": {
+      "volume_cm3": 4.25,
+      "size_mm": [
+        16.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
     "liner_m1air": {
       "volume_cm3": 14.51,
       "size_mm": [
         48.0,
+        25.9,
+        33.0
+      ],
+      "watertight": true
+    },
+    "liner_m1air_test": {
+      "volume_cm3": 5.02,
+      "size_mm": [
+        16.0,
         25.9,
         33.0
       ],

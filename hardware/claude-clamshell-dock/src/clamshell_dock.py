@@ -293,19 +293,24 @@ def liner_height(p: P) -> float:
     return p.height - p.z_floor - p.liner_recess
 
 
-def make_liner(p: P, t: float, lean: float = 0.0, label: str = "") -> Part:
+def make_liner(p: P, t: float, lean: float = 0.0, label: str = "", coupon: bool = False) -> Part:
     """U-shaped liner. Each wall is a 1.2 mm membrane backed by an air gap, so the
     four contact bumps per side give way instead of squeezing the laptop.
-    lean > 0 tilts the front wall (for the wedge-shaped M1 MacBook Air)."""
-    lx, wy, hz, f = p.liner_len, p.slot_w - 2 * p.liner_clr, liner_height(p), p.liner_floor
+    lean > 0 tilts the front wall (for the wedge-shaped M1 MacBook Air).
+    coupon=True makes a 16 mm slice with one bump per side and no snap holes:
+    a quick print to feel the fit on your Mac before printing the real pair."""
+    lx = 16.0 if coupon else p.liner_len
+    wy, hz, f = p.slot_w - 2 * p.liner_clr, liner_height(p), p.liner_floor
     g0 = liner_gap(p, t)
     need = p.membrane_t + p.air_gap + 1.2
     if (wy - g0) / 2 < need:
         raise ValueError(f"slot_w too small for a {t} mm laptop")
 
     part = Pos(0, 0, hz / 2) * Box(lx, wy, hz)
-    span = (lx - 3 * p.rib_w) / 2
-    bays = [(-lx / 2 + p.rib_w, -p.rib_w / 2), (p.rib_w / 2, lx / 2 - p.rib_w)]
+    if coupon:
+        bays = [(-lx / 2 + p.rib_w, lx / 2 - p.rib_w)]
+    else:
+        bays = [(-lx / 2 + p.rib_w, -p.rib_w / 2), (p.rib_w / 2, lx / 2 - p.rib_w)]
     zt = hz - p.lead_in
     for s in (-1, 1):
         tan_a = math.tan(math.radians(lean)) if s < 0 else 0.0
@@ -339,13 +344,17 @@ def make_liner(p: P, t: float, lean: float = 0.0, label: str = "") -> Part:
             part += b
 
     # snap holes for the pegs: narrow lip at the bottom, wider pocket above
-    for dx in (-p.peg_dx, p.peg_dx):
+    for dx in () if coupon else (-p.peg_dx, p.peg_dx):
         part -= Pos(dx, 0, 0.5) * Cylinder(p.peg_neck_d / 2 + 0.2, 1.02)
         part -= Pos(dx, 0, 1.0 + (f - 1.0) / 2 + 0.05) * Cylinder(p.peg_head_d / 2 + 0.25, f - 1.0 + 0.1)
 
     if label:
-        sk = mirror(text_sketch(label, 0.6), about=Plane.YZ)
-        part -= Pos(0, -wy / 2 + 3.4, -0.01) * extrude(sk, 0.41)
+        sk = mirror(text_sketch(label, 0.6 if not coupon else 0.5), about=Plane.YZ)
+        if coupon:  # the label runs across the floor of the short coupon
+            sk = Rot(0, 0, 90) * sk
+            part -= Pos(-lx / 2 + 2.6, 0, -0.01) * extrude(sk, 0.41)
+        else:
+            part -= Pos(0, -wy / 2 + 3.4, -0.01) * extrude(sk, 0.41)
     return _ok(part, f"liner {label or t}")
 
 
@@ -540,6 +549,7 @@ def make_parts(p: P) -> dict[str, Part]:
     parts = {"body": make_body(p), "body_no_logo": make_body(p, logo=False)}
     for key, (t, lean) in LINERS.items():
         parts[f"liner_{key}"] = make_liner(p, t, lean, f"{key.upper()} {t:g}")
+        parts[f"liner_{key}_test"] = make_liner(p, t, lean, key.upper(), coupon=True)
     parts["foot_tpu"] = make_foot(p)
     for name, holes in GROMMETS.items():
         parts[name] = make_grommet(p, holes)
@@ -585,6 +595,14 @@ def build_all(p: P, out: Path, step: bool = True) -> dict:
             {"name": "clawd_single", "parts": [("clawd_single", meshes["logo_single_color"])], "at": (c, c)},
             {"name": "eye_peg_1", "parts": [("eye_peg", meshes["logo_eye_peg"])], "at": (c - 6, c - 25)},
             {"name": "eye_peg_2", "parts": [("eye_peg", meshes["logo_eye_peg"])], "at": (c + 6, c - 25)},
+        ],
+    )
+    write_3mf(
+        mf_dir / "0_TPU_fit_test_all_liners.3mf",
+        "16 mm test slices of every liner",
+        [
+            {"name": f"test_{k}", "parts": [(f"liner_{k}_test", meshes[f"liner_{k}_test"])], "at": (c - 80 + 40 * i, c)}
+            for i, k in enumerate(LINERS)
         ],
     )
     for key in LINERS:
