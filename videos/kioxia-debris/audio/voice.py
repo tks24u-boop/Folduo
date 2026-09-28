@@ -118,7 +118,8 @@ def main():
             fl = int(0.03 * SR)
             voice[stop - fl: stop] *= np.linspace(1, 0, fl)[:, None]
             voice[stop: stop + int(1.0 * SR)] = 0
-        duck[i0:i1] = 1.0
+        if style != "whisper":  # the BGM is silent under "しかし"; never duck into the drop
+            duck[i0:i1] = 1.0
         print(f"{t0:7.3f}s  {style:8s}  {(i1 - i0) / SR:5.2f}s  {text}")
 
     # smooth ducking envelope: ~30 ms pre-roll (attack), one-pole 250 ms release
@@ -129,7 +130,7 @@ def main():
 
     sf.write(os.path.join(HERE, "voice.wav"), np.clip(voice, -1, 1), SR, subtype="PCM_24")
 
-    bgm_path = os.path.join(HERE, "bgm.wav")
+    bgm_path = os.environ.get("BGM", os.path.join(HERE, "bgm.wav"))
     if not os.path.exists(bgm_path):
         print("bgm.wav missing -> wrote voice.wav only")
         return
