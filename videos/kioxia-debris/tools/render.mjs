@@ -2,7 +2,10 @@
 // intermediate H.264 segment, then segments are concatenated and muxed with the BGM.
 //
 //   node tools/render.mjs [--w 1920 --h 1080] [--fps 60] [--from 0 --to 45] [--workers 2]
-//                         [--audio audio/bgm.wav] [--out out/kioxia_shock.mp4] [--crf 14]
+//                         [--audio audio/bgm.wav|none] [--out out/kioxia_shock.mp4] [--crf 17]
+// Segments are encoded directly with delivery settings, so chunks rendered on different machines
+// can be joined losslessly:  node tools/concat.mjs out/chunks/*.mp4 --audio audio/bgm.wav --out out/final.mp4
+// FFMPEG env var overrides the ffmpeg binary.
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -14,7 +17,8 @@ const W = +(a.w || 1920), H = +(a.h || 1080);
 const FPS = +(a.fps || cues.fps);
 const from = +(a.from ?? 0), to = +(a.to ?? cues.duration);
 const workers = +(a.workers || 2);
-const crf = String(a.crf || 12); // intermediate segments (near-lossless)
+const crf = String(a.crf || 17);
+const FF = process.env.FFMPEG || 'ffmpeg';
 const out = path.resolve(a.out || 'out/kioxia_shock.mp4');
 const audio = a.audio === 'none' ? null : path.resolve(a.audio || 'audio/bgm.wav');
 const segDir = path.resolve(a.segdir || 'out/segments');
@@ -40,9 +44,10 @@ async function worker(k) {
   if (a0 >= a1) return null;
   const seg = path.join(segDir, `seg_${String(k).padStart(2, '0')}.mp4`);
   const { browser, page } = await openPage({ port, w: W, h: H, q: +(a.q || 0.95), log: true });
-  const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
-    '-c:v', 'libx264', '-preset', a.preset || 'slow', '-crf', crf, '-pix_fmt', 'yuv420p', '-profile:v', 'high',
-    '-x264-params', 'keyint=120:min-keyint=1', '-r', String(FPS), seg], { stdio: ['pipe', 'inherit', 'inherit'] });
+  const ff = spawn(FF, ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
+    '-c:v', 'libx264', '-preset', a.preset || 'medium', '-crf', crf, '-maxrate', '30M', '-bufsize', '60M',
+    '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-level', '4.2', '-g', '120', '-bf', '2', '-r', String(FPS), seg],
+    { stdio: ['pipe', 'inherit', 'inherit'] });
   try {
     for (let i = a0; i < a1; i++) {
       const url = await page.evaluate((fi) => window.renderFrame(fi), i);
@@ -67,16 +72,14 @@ try {
   console.log(`\nrendered ${total} frames in ${((Date.now() - tStart) / 60000).toFixed(1)} min`);
   const list = path.join(segDir, 'list.txt');
   fs.writeFileSync(list, segs.map((s) => `file '${s}'`).join('\n'));
-  // Final delivery encode (X/Twitter friendly): H.264 High@4.2, yuv420p, ~20-30 Mbps, AAC 320k.
+  // Join segments losslessly (already delivery-encoded: H.264 High@4.2 yuv420p) + optional AAC audio.
   const argv = ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list];
   if (audio && fs.existsSync(audio)) {
     argv.push('-ss', String(from), '-t', String(to - from), '-i', audio, '-map', '0:v', '-map', '1:a',
-      '-c:a', 'aac', '-b:a', '320k', '-ar', '48000');
+      '-c:a', 'aac', '-b:a', '320k', '-ar', '48000', '-shortest');
   }
-  argv.push('-c:v', 'libx264', '-preset', 'slow', '-crf', String(a.finalcrf || 17), '-maxrate', '30M', '-bufsize', '60M',
-    '-profile:v', 'high', '-level', '4.2', '-pix_fmt', 'yuv420p', '-r', String(FPS), '-g', '120', '-bf', '2',
-    '-movflags', '+faststart', '-shortest', out);
-  await run('ffmpeg', argv);
+  argv.push('-c:v', 'copy', '-movflags', '+faststart', out);
+  await run(FF, argv);
   console.log(`wrote ${out}`);
 } finally {
   srv.close();
