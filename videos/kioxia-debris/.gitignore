@@ -1,0 +1,6 @@
+node_modules/
+scratch/
+out/segments/
+audio/*.wav
+out/kioxia_shock.mp4
+out/concat_list.txt
