@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import uuid
 import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -530,13 +529,14 @@ def write_3mf(path: Path, title: str, items: list[dict]) -> None:
     rels = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        f'<Relationship Target="/3D/3dmodel.model" Id="rel-{uuid.uuid4().hex[:8]}" '
+        '<Relationship Target="/3D/3dmodel.model" Id="rel0" '
         'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>'
     )
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("[Content_Types].xml", types)
-        z.writestr("_rels/.rels", rels)
-        z.writestr("3D/3dmodel.model", model)
+    with zipfile.ZipFile(path, "w") as z:
+        for name, data in (("[Content_Types].xml", types), ("_rels/.rels", rels), ("3D/3dmodel.model", model)):
+            info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))  # fixed stamp: rebuilds give identical files
+            info.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(info, data)
 
 
 # --------------------------------------------------------------------------
