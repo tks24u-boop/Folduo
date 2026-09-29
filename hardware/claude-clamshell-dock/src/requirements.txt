@@ -1,0 +1,5 @@
+# model, STL/3MF/STEP export and checks (Python 3.10+)
+build123d>=0.13
+trimesh>=4
+matplotlib>=3.8   # drawings.py
+# renders only (render_blender.py): pip install bpy  -- needs Python 3.11 and numpy<2, use a separate venv
