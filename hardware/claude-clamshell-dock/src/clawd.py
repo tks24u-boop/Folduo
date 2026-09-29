@@ -26,9 +26,6 @@ CLAWD_ROWS = [
 ]
 CLAWD_EYES = [(1, 5), (1, 12)]
 
-CLAWD_ORANGE_HEX = "#D77757"  # rgb(215,119,87) from the CLI theme
-CLAWD_EYE_HEX = "#000000"
-
 
 def _cell(u: float, row: int, c0: int, c1: int) -> Rectangle:
     x0 = (c0 - 1) * u - 8 * u
@@ -48,7 +45,3 @@ def clawd_sketches(u: float) -> tuple[Sketch, Sketch, Sketch]:
     body = [_cell(u, r, a, b) for r, spans in CLAWD_ROWS for a, b in spans]
     eyes = [_cell(u, r, c, c) for r, c in CLAWD_EYES]
     return Sketch() + body + eyes, Sketch() + body, Sketch() + eyes
-
-
-def clawd_size(u: float) -> tuple[float, float]:
-    return 16 * u, 10 * u

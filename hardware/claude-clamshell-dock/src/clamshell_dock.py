@@ -8,7 +8,7 @@ the ends that hold it. The Mac stands hinge-down in a felt-lined 90 deg V.
 Printed parts
   body    black PETG, upright, no supports                    1_body_PETG.3mf
   badge   Clawd seal: 2 mm glow PLA face + 1 mm white PLA     2_clawd_badge.3mf
-  gauge   optional fit test: horn slice, slot comb, seal      0_fit_gauge_PETG.3mf
+  gauge   optional fit test: horn slice and pad comb        0_fit_gauge_PETG.3mf
 Bought: 2 mm self-adhesive felt (V strips and pad liners), four flat 12 x 2 mm feet.
 
 Usage
@@ -28,7 +28,7 @@ import json
 import math
 import tempfile
 import zipfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 import trimesh
@@ -82,11 +82,10 @@ class P:
     # fit (chosen on the gauge; see README)
     mac_t: float = 11.3
     c: float = 0.6  # total running clearance between the Mac and the pad liners
-    liner_t: float = 2.0  # pad liner: Daiso 2 mm felt (0.7 for velvet/flock sheet)
+    liner_t: float = 2.0  # pad liner: Daiso 2 mm felt; a thin sliding tape works too (--liner)
     felt_t: float = 2.0  # V strips
-    v_offset: float = 0.0  # moves both pad pairs in y if the Mac seats off-centre
+    v_offset: float = 0.0  # moves both pad pairs in +y if the Mac seats off-centre
     # frame
-    zb: float = 1.2  # printed underside above the desk (foot protrusion)
     za: float = 2.1  # virtual apex of the 45 deg V
     zg: float = 4.6  # grit floor at the bottom of the V
     gw: float = 2.5  # grit floor half width
@@ -100,48 +99,84 @@ class P:
     y_crest: float = 18.5  # outer corner of the crest
     r_crest: float = 2.5
     y_mouth: float = 15.5  # the trumpet mouth is +-15.5 at every x
-    yr_mid: float = 12.0  # relief walls: 6.35 mm air gap in the middle ...
-    yr_horn: float = 7.75  # ... 2.1 mm at the horns
+    gap_mid: float = 6.35  # air gap from the Mac to the relief walls in the middle ...
+    gap_horn: float = 2.1  # ... and at the horns
     kt_mid: float = 5.0  # trumpet height
     kt_horn: float = 6.7
     end_chamfer: float = 1.0
     r_plan: float = 6.0  # toe-tip plan corners
-    # pad lands, one per face of each horn, 43 mm above the V contact
-    land_x0: float = 82.0
-    land_x1: float = 98.0
-    land_z0: float = 46.0
-    land_z1: float = 58.0
-    land_rim: float = 0.5  # the land rim sits this far below the liner surface
+    # pad lands on the horn relief walls, about 41 mm above the V contact
+    land_x0: float = 81.5
+    land_x1: float = 97.0  # clear of the 1 mm end chamfer
+    land_z0: float = 44.5
+    land_ramp: float = 3.0  # tangent ramps from the relief wall to the land face
+    land_rim: float = 0.5  # a felt pad stands this far proud of its pocket rim
     # V felt pockets
     vfelt_w: float = 6.4
     vfelt_depth: float = 0.4
-    vfelt_up: float = 7.6  # pocket centre, measured up the flank from the virtual apex
     felt_set: float = 0.3  # compression of the V felt under the Mac
-    # feet: flat 12 x 2 mm stick-on feet in 0.8 mm pockets
+    # feet: flat stick-on feet in pockets
     foot_x: float = 90.0
     foot_y: float = 61.0
-    foot_d: float = 12.4
+    foot_dia: float = 12.0
+    foot_h: float = 2.0
     foot_depth: float = 0.8
     # Clawd seal on the front 45 deg face
     logo_u: float = 2.0
     badge_t: float = 3.0
     glow_t: float = 2.0  # glow brightness levels off at about 2 mm
-    badge_clr: float = 0.15  # pocket over the badge, per side
-    pin_clr: float = 0.05  # eye pins under the badge's eye holes, per side
+    badge_clr: float = 0.15  # badge outline inside its pocket, per side
+    pin_clr: float = 0.10  # badge eye holes over the eye pins, per side (45 deg pins print fat)
     push_d: float = 2.5  # push-out hole from below
     # cable fairleads (rear toes, both ends) and plug docks in the end faces
     cable_z: float = 8.0
     cable_turn_x: float = 88.0
     cable_turn_y: float = 76.0
+    usb_y: float = 24.5
+    mag_y: float = 33.5
+    thr_usb: float = 4.2  # snap throats; a cable that will not go in can be scraped wider
+    thr_mag: float = 3.0
+
+    def __post_init__(self):
+        if 0 < self.liner_t - self.land_rim < 0.2:
+            raise ValueError(f"liner {self.liner_t} mm: use at most {self.land_rim} (no pocket) or at least {self.land_rim + 0.2}")
+        for sy in (1, -1):
+            if self.land_rise(sy) < 0.3:
+                raise ValueError(f"pad land {self.land_rise(sy):.2f} mm proud of the wall: reduce c, liner or v_offset")
 
     @property
-    def land_y(self) -> float:
-        """Land face: liner surface = mac_t/2 + c/2, and the rim sits land_rim behind it."""
-        return self.mac_t / 2 + self.c / 2 + self.land_rim
+    def zb(self) -> float:
+        """Printed underside above the desk: the part of each foot outside its pocket."""
+        return self.foot_h - self.foot_depth
+
+    @property
+    def yr_mid(self) -> float:
+        return self.mac_t / 2 + self.gap_mid
+
+    @property
+    def yr_horn(self) -> float:
+        return self.mac_t / 2 + self.gap_horn
 
     @property
     def liner_pocket(self) -> float:
-        return self.liner_t - self.land_rim
+        """Felt sits in a pocket with its face land_rim proud of the rim; a thin tape needs none."""
+        return max(self.liner_t - self.land_rim, 0.0)
+
+    @property
+    def land_y(self) -> float:
+        """Land face, with the liner surface at mac_t/2 + c/2 (before v_offset)."""
+        return self.mac_t / 2 + self.c / 2 + self.liner_t - self.liner_pocket
+
+    def land_face(self, sy: int) -> float:
+        return self.land_y + sy * self.v_offset
+
+    def land_rise(self, sy: int) -> float:
+        return self.yr_horn - self.land_face(sy)
+
+    @property
+    def land_z1(self) -> float:
+        """Top of the land face: its ramp ends where the trumpet starts."""
+        return self.h_horn - self.kt_horn - self.land_ramp
 
     @property
     def felt_surface_apex(self) -> float:
@@ -149,8 +184,16 @@ class P:
         return self.za + (self.felt_t - self.vfelt_depth) * math.sqrt(2)
 
     def seat_z(self, edge_r: float = 2.5) -> float:
-        """Height of the Mac's hinge edge when its two corner rounds rest on the V felt."""
-        return self.mac_t / 2 - 2 * edge_r + self.felt_surface_apex + edge_r * math.sqrt(2) - self.felt_set
+        """Height of the Mac's hinge edge when its two corner rounds rest on the V felt
+        (the felt compresses normal to the 45 deg flank)."""
+        return self.mac_t / 2 - 2 * edge_r + self.felt_surface_apex + (edge_r - self.felt_set) * math.sqrt(2)
+
+    @property
+    def vfelt_up(self) -> float:
+        """V felt pocket centre, measured up the flank from the virtual apex: 0.8 mm below
+        where the corner rounds land, which puts the pocket top at the end of the flank."""
+        y_contact = self.mac_t / 2 - 2.5 + 2.5 / math.sqrt(2)
+        return (2 * y_contact + self.felt_surface_apex - self.za) / math.sqrt(2) - 0.8
 
 
 # --------------------------------------------------------------------------
@@ -185,8 +228,6 @@ def section_pts(p: P, x: float) -> dict:
     yt0 = p.h_mid + p.y_crest + 1.5 - 1.5 * math.sqrt(2) - (p.zb + 3.0 + band0)
     yt = yt0 + (p.yt_horn - yt0) * s
     ze = p.zb + k + band0 + (4.2 - (p.zb + 0.6) - band0) * s
-    if s < 1e-9:
-        ze = H + p.y_crest - yt + rt - rt * math.sqrt(2)
 
     c_tip = (yt - rt, ze)
     th_end = 90.0 - atab
@@ -241,10 +282,27 @@ def section_face(p: P, x: float) -> Face:
     return Face(Wire(edges))
 
 
-def _ok(part: Part, name: str) -> Part:
+def _ok(part: Part, name: str, solids: int = 1) -> Part:
     if not part.is_valid:
         raise RuntimeError(f"{name}: invalid solid")
+    if len(part.solids()) != solids:
+        raise RuntimeError(f"{name}: {len(part.solids())} separate solids, expected {solids}")
     return part
+
+
+def _yz_face(x: float, pts: list, beziers: dict) -> Face:
+    """Closed face in the plane x = const from (y, z) points; beziers maps a point index
+    i to the two control points of a cubic from point i to point i + 1."""
+    v = [Vector(x, y, z) for y, z in pts]
+    edges = []
+    for i in range(len(v)):
+        a, b = v[i], v[(i + 1) % len(v)]
+        if i in beziers:
+            c1, c2 = (Vector(x, y, z) for y, z in beziers[i])
+            edges.append(Edge.make_bezier(a, c1, c2, b))
+        else:
+            edges.append(Edge.make_line(a, b))
+    return Face(Wire(edges))
 
 
 # --------------------------------------------------------------------------
@@ -272,51 +330,77 @@ def seal_plane(p: P) -> Plane:
     return Plane(origin=(0, -cy, cz), x_dir=(1, 0, 0), z_dir=Vector(0, -1, 1).normalized())
 
 
+def fairlead_profile(p: P, r: float, throat: float, lead: float) -> Sketch:
+    """Cable channel section: bore of radius r at cable_z with a 45 deg teardrop roof,
+    a throat open to the underside that the cable snaps through, and a lead-in."""
+    s2, zc, zb = math.sqrt(2), p.cable_z, p.zb
+    # counter-clockwise, like the other pieces: a clockwise polygon extrudes the other way
+    roof = Polygon((0, zc), (r / s2, zc + r / s2), (0, zc + r * s2), (-r / s2, zc + r / s2), align=None)
+    neck = Pos(0, (zc + zb - 2) / 2) * Rectangle(throat, zc - (zb - 2))
+    mouth = Polygon(
+        (-lead / 2, zb - 2), (lead / 2, zb - 2), (lead / 2, zb), (throat / 2, zb + (lead - throat) / 2),
+        (-throat / 2, zb + (lead - throat) / 2), (-lead / 2, zb), align=None,
+    )  # fmt: skip
+    return Sketch() + [Pos(0, zc) * Circle(r), roof, neck, mouth]
+
+
 def cable_cutter(p: P) -> Part:
     """Bottom-loaded fairleads in the +x rear toe: a straight run from the end face,
-    then a turn to the rear at the cable's minimum bend radius. The roof is a 45 deg
-    teardrop, so nothing bridges. Plug docks in the end face hold each plug nose-out."""
-
-    def profile(r, zc, wt, wl):
-        s2 = math.sqrt(2)
-        # counter-clockwise, like the other pieces: a clockwise polygon extrudes the other way
-        roof = Polygon((0, zc), (r / s2, zc + r / s2), (0, zc + r * s2), (-r / s2, zc + r / s2), align=None)
-        throat = Pos(0, (zc + p.zb - 2) / 2) * Rectangle(wt, zc - (p.zb - 2))
-        lead = Polygon(
-            (-wl / 2, p.zb - 2), (wl / 2, p.zb - 2), (wl / 2, p.zb), (wt / 2, p.zb + (wl - wt) / 2),
-            (-wt / 2, p.zb + (wl - wt) / 2), (-wl / 2, p.zb), align=None,
-        )  # fmt: skip
-        return Sketch() + [Pos(0, zc) * Circle(r), roof, throat, lead]
-
+    then a turn to the rear, wider than the cable's minimum bend radius. Plug docks in
+    the end face hold each plug nose-out."""
     # y, bore radius, throat, lead-in, dock height, dock width: USB-C / Thunderbolt, then MagSafe 3
-    channels = [(28.0, 2.65, 4.2, 6.2, 13.4, 7.8), (36.0, 1.95, 3.0, 5.0, 13.6, 4.9)]
-    zc, xt, yc = p.cable_z, p.cable_turn_x, p.cable_turn_y
+    channels = [(p.usb_y, 2.65, p.thr_usb, 6.2, 13.4, 7.8), (p.mag_y, 1.95, p.thr_mag, 5.0, 13.6, 4.9)]
+    xt, yc = p.cable_turn_x, p.cable_turn_y
     cut = None
     for y0, r, wt, wl, dh, dw in channels:
-        prof = profile(r, zc, wt, wl)
+        prof = fairlead_profile(p, r, wt, wl)
         pl = Plane(origin=(p.x_end + 3, y0, 0), x_dir=(0, -1, 0), z_dir=(-1, 0, 0))
         straight = extrude(pl * prof, p.x_end + 3 - xt)
         arc = revolve(Plane(origin=(xt, y0, 0), x_dir=(0, -1, 0), z_dir=(-1, 0, 0)) * prof, Axis((xt, yc, 0), (0, 0, 1)), -90)
-        dock = Pos(p.x_end, y0, zc - 0.6) * Box(4.0, dw, dh + 1.2)
+        dock = Pos(p.x_end, y0, p.cable_z - 0.6) * Box(4.0, dw, dh + 1.2)
         c = straight + arc + dock
         cut = c if cut is None else cut + c
     return cut
 
 
+def land_solid(p: P, sx: int, sy: int) -> Part:
+    """One pad land: a y-z profile rooted 0.6 mm inside the relief wall, with tangent
+    ramps up to the land face and back, extruded along x. The Mac only ever slides past
+    rounded ramps, never a crease."""
+    w, f = p.yr_horn, p.land_face(sy)
+    z0, z1, r = p.land_z0, p.land_z1, p.land_ramp
+    r0 = max(r, 2 * (w - f))  # the lower ramp overhangs: its steepest point is atan(2 rise / r0) <= 45 deg
+    pts = [(w + 0.6, z0 - r0), (w, z0 - r0), (f, z0), (f, z1), (w, z1 + r), (w + 0.6, z1 + r)]
+    ramps = {1: ((w, z0 - r0 / 2), (f, z0 - r0 / 2)), 3: ((f, z1 + r / 2), (w, z1 + r / 2))}
+    face = _yz_face(p.land_x0, [(sy * y, z) for y, z in pts], {i: tuple((sy * y, z) for y, z in c) for i, c in ramps.items()})
+    land = extrude(face, p.land_x1 - p.land_x0, dir=(1, 0, 0))
+    return land if sx > 0 else mirror(land, Plane.YZ)
+
+
+def pad_pocket(p: P, sx: int, sy: int) -> Part:
+    """Felt pocket in a land face with a 45 deg ceiling, so nothing overhangs."""
+    d, f = p.liner_pocket, p.land_face(sy)
+    zb0, zt = p.land_z0 + 0.5, p.land_z1 - 0.5
+    pts = [(f - 0.01, zb0), (f + d, zb0), (f + d, zt - d), (f - 0.01, zt + 0.01)]
+    face = _yz_face(p.land_x0 + 1, [(sy * y, z) for y, z in pts], {})
+    pocket = extrude(face, p.land_x1 - p.land_x0 - 2, dir=(1, 0, 0))
+    return pocket if sx > 0 else mirror(pocket, Plane.YZ)
+
+
+def push_hole(p: P, floor_centre: Vector, z_from: float) -> Part:
+    """Vertical push-out hole from z_from up through the sloping floor of the seal pocket."""
+    top = floor_centre.Z + p.push_d / 2 + 0.6  # clears the floor across the whole hole
+    return Pos(0, floor_centre.Y, (z_from + top) / 2) * Cylinder(p.push_d / 2, top - z_from)
+
+
 def make_body(p: P) -> Part:
     body = make_shell(p)
 
-    # pad lands: 45 deg frustums on the relief walls, with liner pockets
-    xc, zc = (p.land_x0 + p.land_x1) / 2, (p.land_z0 + p.land_z1) / 2
-    lx, lz = p.land_x1 - p.land_x0, p.land_z1 - p.land_z0
-    rise = p.yr_horn - p.land_y
     for sx in (1, -1):
         for sy in (1, -1):
-            pl = Plane(origin=(sx * xc, sy * p.yr_horn + p.v_offset, zc), x_dir=(1, 0, 0), z_dir=(0, -sy, 0))
-            base = Rectangle(lx + 2 * rise, lz + 2 * rise)
-            body += extrude(pl * base, rise, taper=45) + extrude(pl * base, -0.6)
-            face_y = sy * p.land_y + p.v_offset
-            body -= Pos(sx * xc, face_y + sy * p.liner_pocket / 2, zc) * Box(lx - 2, p.liner_pocket, lz - 1)
+            body += land_solid(p, sx, sy)
+            if p.liner_pocket > 0:
+                body -= pad_pocket(p, sx, sy)
 
     # felt pockets on both V flanks, closed 2 mm short of the ends
     for sy in (1, -1):
@@ -326,16 +410,17 @@ def make_body(p: P) -> Part:
 
     for sx in (1, -1):
         for sy in (1, -1):
-            body -= Pos(sx * p.foot_x, sy * p.foot_y, p.zb + p.foot_depth / 2 - 0.01) * Cylinder(p.foot_d / 2, p.foot_depth + 0.02)
+            pocket_d = p.foot_dia + 0.4
+            body -= Pos(sx * p.foot_x, sy * p.foot_y, p.zb + p.foot_depth / 2 - 0.01) * Cylinder(pocket_d / 2, p.foot_depth + 0.02)
 
-    # Clawd seal: pocket, black eye pins that show through the badge, push-out hole
+    # Clawd seal: pocket, black eye pins that show through the badge, push-out hole. Both
+    # are exact; the clearances are in the badge, a five-minute reprint.
     pl = seal_plane(p)
     outline, _, eyes = clawd_sketches(p.logo_u)
-    body -= extrude(pl * offset(outline, p.badge_clr, kind=Kind.INTERSECTION), -p.badge_t)
+    body -= extrude(pl * outline, -p.badge_t)
     floor = pl.offset(-p.badge_t)
-    body += extrude(floor * offset(eyes, -p.pin_clr, kind=Kind.INTERSECTION), p.badge_t)
-    fc = floor.origin
-    body -= Pos(0, fc.Y, (p.zb - 1 + fc.Z + 0.6) / 2) * Cylinder(p.push_d / 2, fc.Z + 0.6 - (p.zb - 1))
+    body += extrude(floor * eyes, p.badge_t)
+    body -= push_hole(p, floor.origin, p.zb - 1)
 
     cut = cable_cutter(p)
     body -= cut + mirror(cut, Plane.YZ)
@@ -347,10 +432,12 @@ def make_body(p: P) -> Part:
 # --------------------------------------------------------------------------
 def make_badge_parts(p: P) -> dict[str, Part]:
     """Badge in print orientation, face down: glow layers first, then white. The eye
-    holes go through both, so the black PETG pins become the eyes."""
-    _, body_sk, _ = clawd_sketches(p.logo_u)
-    glow = extrude(body_sk, p.glow_t)
-    white = Pos(0, 0, p.glow_t) * extrude(body_sk, p.badge_t - p.glow_t)
+    holes go through both, so the black PETG pins become the eyes. It carries both fit
+    clearances, so a tight or loose badge is fixed by reprinting only the badge."""
+    outline, _, eyes = clawd_sketches(p.logo_u)
+    sk = offset(outline, -p.badge_clr, kind=Kind.INTERSECTION) - offset(eyes, p.pin_clr, kind=Kind.INTERSECTION)
+    glow = extrude(sk, p.glow_t)
+    white = Pos(0, 0, p.glow_t) * extrude(sk, p.badge_t - p.glow_t)
     return {"badge_glow": _ok(glow, "badge glow"), "badge_white": _ok(white, "badge white")}
 
 
@@ -359,55 +446,58 @@ def place_badge(p: P, part: Part) -> Part:
     return seal_plane(p) * (Rot(0, 180, 0) * part)
 
 
-def make_gauge(p: P) -> Part:
-    """Fit test on one flat plate, about 45 min:
-    - a 10 mm slice of the real horn section, lying on its end face, with the V, the
-      felt pockets and the pad lands: stand the Mac's hinge edge in it
-    - a comb of five pad slots, c = 0.2 / 0.4 / 0.6 / 0.8 / 1.0 (1-5 notches)
-    - a 45 deg wedge with the real seal pocket and eye pins for the badge fit"""
-    q = p.x_horn + 5
-    zc = (p.land_z0 + p.land_z1) / 2
-    s = extrude(section_face(p, p.x_horn), 10, dir=(1, 0, 0)) & Pos(q, 0, 40) * Box(10, 34, 80)
-    rise = p.yr_horn - p.land_y
-    for sy in (1, -1):
-        pl = Plane(origin=(q, sy * p.yr_horn + p.v_offset, zc), x_dir=(1, 0, 0), z_dir=(0, -sy, 0))
-        base = Rectangle(10.0, p.land_z1 - p.land_z0 + 2 * rise)
-        s += extrude(pl * base, rise, taper=45) + extrude(pl * base, -0.6)
-        s -= Pos(q, sy * (p.land_y + p.liner_pocket / 2) + p.v_offset, zc) * Box(12, p.liner_pocket, p.land_z1 - p.land_z0 - 1)
-        n, t = Vector(0, -sy, 1).normalized(), Vector(0, sy, 1).normalized()
-        s -= Plane(origin=Vector(q, 0, p.za) + t * p.vfelt_up, x_dir=(1, 0, 0), z_dir=n) * Box(12, p.vfelt_w, 2 * p.vfelt_depth)
-    s += Pos(q, 0, p.zb + 1.5) * Box(10, 40, 3)
-    s = Rot(0, -90, 0) * Pos(-p.x_horn, 0, 0) * s
-    bb = s.bounding_box()
-    slice_ = Pos(-bb.min.X - 70, 0, -bb.min.Z) * s
+def _notches(n: int, x: float, y: float, z: float) -> Part:
+    """n tally notches cut into a top face, for telling gauge pieces apart."""
+    cut = None
+    for k in range(n):
+        b = Pos(x + 2.0 * (k - (n - 1) / 2), y, z) * Box(1.0, 3.0, 2.0)
+        cut = b if cut is None else cut + b
+    return cut
 
-    comb = Pos(0, 0, 4) * Box(66, 30, 8)
-    for i, c in enumerate((0.2, 0.4, 0.6, 0.8, 1.0)):
-        w = p.mac_t + c + 2 * p.land_rim  # bare land-to-land width
-        x = -26 + i * 13
-        comb -= Pos(x, 6, 4.5) * Box(w, 18.01, 8)
-        for sy in (1, -1):
-            comb -= Pos(x + sy * (w / 2 + p.liner_pocket / 2), 7, 4.5) * Box(p.liner_pocket, 11, 6)
-        for k in range(i + 1):
-            comb -= Pos(x - 2.4 + 1.2 * k, -13.5, 8) * Box(0.6, 3, 1.2)
-    comb = Pos(20, 45, 0) * comb
 
-    # seal coupon: a 45 deg wedge carrying the real pocket and pins
-    wedge = extrude(Plane.YZ * Polygon((-14, 1), (14, 1), (14, 29), align=None), 21, both=True)
-    wedge += Pos(0, 0, 0.5) * Box(42, 28, 1)
-    pl = Plane(origin=(0, 0, 15), x_dir=(1, 0, 0), z_dir=Vector(0, -1, 1).normalized())
-    outline, _, eyes = clawd_sketches(p.logo_u)
-    wedge -= extrude(pl * offset(outline, p.badge_clr, kind=Kind.INTERSECTION), -p.badge_t)
-    wedge += extrude(pl.offset(-p.badge_t) * offset(eyes, -p.pin_clr, kind=Kind.INTERSECTION), p.badge_t)
-    coupon = Pos(20, -35, 0) * wedge
-    return _ok(slice_ + comb + coupon, "gauge")
+GAUGE_C = (0.2, 0.4, 0.6, 0.8, 1.0)
+
+
+def make_gauge(p: P) -> dict[str, Part]:
+    """Fit test for what only a body reprint could fix, each piece in print orientation:
+    - slice: 8 mm of the real horn, lying on its cut face, with the V, felt pockets and
+      pad lands: stand the Mac's hinge edge in it
+    - comb: five pad slots, c = 0.2 / 0.4 / 0.6 / 0.8 / 1.0 (1-5 notches)
+    The badge fit is set in the badge itself and the cable throats can be scraped wider,
+    so neither needs a test piece."""
+    out = {}
+    body = make_body(p)
+    s = body & Pos(p.x_horn + 8, 0, 40) * Box(8, 36, 90)
+    s = Rot(0, -90, 0) * s  # the cut face at x = 84 goes down
+    out["slice"] = to_bed(s)
+
+    w_max = p.mac_t + max(GAUGE_C) + 2 * (p.liner_t - p.liner_pocket)
+    pitch = w_max + 2 * p.liner_pocket + 4.0
+    comb = Pos(0, 0, 4) * Box(len(GAUGE_C) * pitch + 4, 22, 8)
+    for i, c in enumerate(GAUGE_C):
+        w = p.mac_t + c + 2 * (p.liner_t - p.liner_pocket)  # bare land-to-land width
+        x = (i - (len(GAUGE_C) - 1) / 2) * pitch
+        comb -= Pos(x, 4, 4.8) * Box(w, 14.01, 8)  # open at the back and the top
+        if p.liner_pocket > 0:
+            for sy in (1, -1):
+                comb -= Pos(x + sy * (w / 2 + p.liner_pocket / 2), 5.5, 4.25) * Box(p.liner_pocket, 10, 5.5)
+        comb -= _notches(i + 1, x, -8, 8)
+    out["comb"] = comb
+
+    return out
 
 
 # --------------------------------------------------------------------------
 # liners, feet and a Mac stand-in (checks and renders)
 # --------------------------------------------------------------------------
+def pad_size(p: P) -> tuple[float, float]:
+    """Pad liner to cut (x by z): fits the pocket's short back edge with 0.3 mm to spare."""
+    h = p.land_z1 - p.land_z0 - 1 - p.liner_pocket - 0.3 if p.liner_pocket > 0 else p.land_z1 - p.land_z0 - 1
+    return p.land_x1 - p.land_x0 - 2.5, h
+
+
 def liners(p: P) -> dict[str, Part]:
-    """The felt as the README says to cut it: two 6 x 196 mm V strips and four pads."""
+    """The felt as the README says to cut it: two V strips and four pads."""
     out = {}
     for sy in (1, -1):
         n, t = Vector(0, -sy, 1).normalized(), Vector(0, sy, 1).normalized()
@@ -415,18 +505,19 @@ def liners(p: P) -> dict[str, Part]:
         centre = Vector(0, 0, p.za) + t * p.vfelt_up + n * (thick / 2 - p.vfelt_depth)
         box = Box(2 * p.x_end - 4.4, p.vfelt_w - 0.4, thick)
         out[f"felt_v{'r' if sy > 0 else 'l'}"] = Plane(origin=centre, x_dir=(1, 0, 0), z_dir=n) * box
-    xc, zc = (p.land_x0 + p.land_x1) / 2, (p.land_z0 + p.land_z1) / 2
+    xc = (p.land_x0 + p.land_x1) / 2
+    px, pz = pad_size(p)
+    zc = p.land_z0 + 0.5 + 0.15 + pz / 2
     for sx in (1, -1):
         for sy in (1, -1):
-            y = sy * (p.land_y + p.liner_pocket - p.liner_t / 2) + p.v_offset
-            pad = Box(p.land_x1 - p.land_x0 - 2.4, p.liner_t, p.land_z1 - p.land_z0 - 1.4)
-            out[f"pad_{'r' if sx > 0 else 'l'}{'b' if sy > 0 else 'f'}"] = Pos(sx * xc, y, zc) * pad
+            y = sy * (p.land_face(sy) + p.liner_pocket - p.liner_t / 2)
+            out[f"pad_{'r' if sx > 0 else 'l'}{'b' if sy > 0 else 'f'}"] = Pos(sx * xc, y, zc) * Box(px, p.liner_t, pz)
     return out
 
 
 def make_foot(p: P) -> Part:
-    """Flat 12 x 2 mm stick-on foot, top at z = 2."""
-    foot = Pos(0, 0, 1.0) * Cylinder(6.0, 2.0)
+    """Flat stick-on foot, top face at z = 0."""
+    foot = Pos(0, 0, -p.foot_h / 2) * Cylinder(p.foot_dia / 2, p.foot_h)
     return fillet(foot.edges().group_by(Axis.Z)[0], 0.5)
 
 
@@ -440,6 +531,11 @@ def make_laptop(lp: Laptop, edge_r: float = 2.5, r_plan: float = 13.0) -> Part:
     return body - Pos(0, 0, lp.thickness * 0.68) * ring
 
 
+def mac_for(p: P) -> Laptop:
+    """The Air 13 at the thickness the dock was built for (--mac-t)."""
+    return replace(AIR13, thickness=p.mac_t)
+
+
 def place_laptop(p: P, lp: Laptop, part: Part, edge_r: float = 2.5) -> Part:
     """Stand the Mac hinge-down in the V, lid towards the user."""
     return Pos(0, 0, p.seat_z(edge_r)) * Rot(90, 0, 0) * Pos(0, lp.depth / 2, -lp.thickness / 2) * part
@@ -451,8 +547,8 @@ def place_laptop(p: P, lp: Laptop, part: Part, edge_r: float = 2.5) -> Part:
 def stability(p: P, lp: Laptop, dock_kg: float, dock_cg_z: float) -> dict:
     """Push at the Mac's top edge that starts tipping the dock across the slot, the
     static tip angle, and the tip force for a sideways pull at the fairlead height.
-    The pivot is the outer edge of the feet (12 mm feet, 0.5 mm edge round)."""
-    b = p.foot_y + 6.0 - 0.5
+    The pivot is the outer edge of the feet (0.5 mm edge round)."""
+    b = p.foot_y + p.foot_dia / 2 - 0.5
     m = lp.weight + dock_kg
     z0 = p.seat_z()
     cg = (lp.weight * (z0 + lp.depth / 2) + dock_kg * dock_cg_z) / m
@@ -476,33 +572,55 @@ def stl_mesh(part: Part, path: Path, tol: float) -> trimesh.Trimesh:
     return m
 
 
-def write_3mf(path: Path, title: str, parts: list[tuple[str, trimesh.Trimesh]], at=(128.0, 128.0)) -> None:
-    """Plain 3MF core file that Bambu Studio, OrcaSlicer and PrusaSlicer open: one
-    object; with several parts, each part can take its own filament."""
-    res, ids = [], []
-    for oid, (name, mesh) in enumerate(parts, start=1):
-        v = "".join(f'<vertex x="{a:.4f}" y="{b:.4f}" z="{c:.4f}"/>' for a, b, c in mesh.vertices)
-        t = "".join(f'<triangle v1="{i}" v2="{j}" v3="{k}"/>' for i, j, k in mesh.faces)
-        res.append(f'<object id="{oid}" type="model" name="{name}"><mesh><vertices>{v}</vertices><triangles>{t}</triangles></mesh></object>')
-        ids.append(oid)
-    top = ids[0]
-    if len(ids) > 1:
-        top = len(ids) + 1
-        comps = "".join(f'<component objectid="{i}"/>' for i in ids)
-        res.append(f'<object id="{top}" type="model" name="{title}"><components>{comps}</components></object>')
+@dataclass
+class Obj3mf:
+    name: str
+    parts: list  # [(part name, mesh, extruder or None)]
+    at: tuple  # (x, y) on the 256 mm plate
+    settings: dict  # Bambu Studio process settings for this object
+
+
+def write_3mf(path: Path, title: str, objects: list[Obj3mf]) -> None:
+    """3MF core file plus Bambu Studio's Metadata/model_settings.config, which Bambu
+    Studio and OrcaSlicer also read from other programs' files: per-object process
+    settings (walls, infill) and a filament per part. An object with several parts
+    loads as one object; PrusaSlicer ignores the settings and splits such an object."""
+    res, build, cfg, oid = [], [], [], 1
+    for ob in objects:
+        ids = []
+        for pname, mesh, _ in ob.parts:
+            v = "".join(f'<vertex x="{a:.4f}" y="{b:.4f}" z="{c:.4f}"/>' for a, b, c in mesh.vertices)
+            t = "".join(f'<triangle v1="{i}" v2="{j}" v3="{k}"/>' for i, j, k in mesh.faces)
+            res.append(f'<object id="{oid}" type="model" name="{pname}"><mesh><vertices>{v}</vertices><triangles>{t}</triangles></mesh></object>')
+            ids.append(oid)
+            oid += 1
+        top = ids[0]
+        if len(ids) > 1:
+            comps = "".join(f'<component objectid="{i}"/>' for i in ids)
+            res.append(f'<object id="{oid}" type="model" name="{ob.name}"><components>{comps}</components></object>')
+            top = oid
+            oid += 1
+        build.append(f'<item objectid="{top}" transform="1 0 0 0 1 0 0 0 1 {ob.at[0]:.3f} {ob.at[1]:.3f} 0"/>')
+        meta = "".join(f'<metadata key="{k}" value="{v}"/>' for k, v in {"name": ob.name, **ob.settings}.items())
+        parts = ""
+        for i, (pname, _, extruder) in zip(ids, ob.parts):
+            ex = f'<metadata key="extruder" value="{extruder}"/>' if extruder else ""
+            parts += f'<part id="{i}" subtype="normal_part"><metadata key="name" value="{pname}"/>{ex}</part>'
+        cfg.append(f'<object id="{top}">{meta}{parts}</object>')
     model = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">'
         f'<metadata name="Title">{title}</metadata>'
         '<metadata name="Designer">Claude Code Clamshell Dock</metadata>'
-        f"<resources>{''.join(res)}</resources>"
-        f'<build><item objectid="{top}" transform="1 0 0 0 1 0 0 0 1 {at[0]:.3f} {at[1]:.3f} 0"/></build></model>'
+        f"<resources>{''.join(res)}</resources><build>{''.join(build)}</build></model>"
     )
+    settings = '<?xml version="1.0" encoding="UTF-8"?>\n<config>' + "".join(cfg) + "</config>"
     types = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
         '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
         '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>'
+        '<Default Extension="config" ContentType="text/xml"/>'
         "</Types>"
     )
     rels = (
@@ -511,8 +629,9 @@ def write_3mf(path: Path, title: str, parts: list[tuple[str, trimesh.Trimesh]], 
         '<Relationship Target="/3D/3dmodel.model" Id="rel0" '
         'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>'
     )
+    files = (("[Content_Types].xml", types), ("_rels/.rels", rels), ("3D/3dmodel.model", model), ("Metadata/model_settings.config", settings))
     with zipfile.ZipFile(path, "w") as z:
-        for name, data in (("[Content_Types].xml", types), ("_rels/.rels", rels), ("3D/3dmodel.model", model)):
+        for name, data in files:
             info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))  # fixed stamp: rebuilds give identical files
             info.compress_type = zipfile.ZIP_DEFLATED
             z.writestr(info, data)
@@ -523,48 +642,78 @@ def to_bed(part: Part) -> Part:
     return Pos(0, 0, -part.bounding_box().min.Z) * part
 
 
+# seams at the back: on the rear faces and inside the slot, away from the viewer
+PETG_SETTINGS = {"wall_loops": "5", "sparse_infill_density": "20%", "sparse_infill_pattern": "gyroid", "seam_position": "back"}
+GAUGE_LAYOUT = {"slice": (128, 160), "comb": (128, 80)}  # plate positions of the gauge pieces
+
+
 def build(p: P, out: Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         body = stl_mesh(to_bed(make_body(p)), tmp / "body.stl", 0.02)
         badge = {k: stl_mesh(v, tmp / f"{k}.stl", 0.01) for k, v in make_badge_parts(p).items()}
-        gauge = stl_mesh(make_gauge(p), tmp / "gauge.stl", 0.02)
-    write_3mf(out / "1_body_PETG.3mf", "TOGE dock body", [("body", body)])
-    write_3mf(out / "2_clawd_badge.3mf", "Clawd badge", [("badge_glow", badge["badge_glow"]), ("badge_white", badge["badge_white"])])
-    write_3mf(out / "0_fit_gauge_PETG.3mf", "Fit gauge", [("gauge", gauge)])
+        gauge = {k: stl_mesh(Pos(-v.center().X, -v.center().Y, 0) * v, tmp / f"{k}.stl", 0.02) for k, v in make_gauge(p).items()}
+    write_3mf(out / "1_body_PETG.3mf", "TOGE dock body", [Obj3mf("TOGE body", [("body", body, None)], (128, 128), PETG_SETTINGS)])
+    write_3mf(
+        out / "2_clawd_badge.3mf",
+        "Clawd badge",
+        [Obj3mf("Clawd badge", [("badge_glow", badge["badge_glow"], 1), ("badge_white", badge["badge_white"], 2)], (128, 128),
+                {"sparse_infill_density": "100%"})],
+    )  # fmt: skip
+    write_3mf(
+        out / "0_fit_gauge_PETG.3mf",
+        "TOGE fit gauge",
+        [Obj3mf(f"gauge_{k}", [(k, m, None)], GAUGE_LAYOUT[k], PETG_SETTINGS) for k, m in gauge.items()],
+    )
     print(f"{p.mac_t + p.c:.2f} mm between the pad liners, body {body.volume / 1000:.1f} cm3, wrote {out}")
 
 
 def export_assembly(p: P, out: Path) -> None:
-    """Placed meshes for renders plus a manifest the Blender script reads."""
+    """Placed meshes for renders plus a manifest the Blender script reads, and the
+    parameters the drawing uses."""
     out.mkdir(parents=True, exist_ok=True)
     badge = make_badge_parts(p)
     items = [("body", make_body(p), "petg")]
     items += [("badge_glow", place_badge(p, badge["badge_glow"]), "glow"), ("badge_white", place_badge(p, badge["badge_white"]), "white")]
     items += [(name, part, "felt") for name, part in liners(p).items()]
     feet = [(sx * p.foot_x, sy * p.foot_y) for sx in (1, -1) for sy in (1, -1)]
-    items += [(f"foot_{i}", Pos(x, y, p.zb - 2.0) * make_foot(p), "rubber") for i, (x, y) in enumerate(feet)]
+    items += [(f"foot_{i}", Pos(x, y, p.zb + p.foot_depth) * make_foot(p), "rubber") for i, (x, y) in enumerate(feet)]
     for set_name, with_laptop in (("assembled", True), ("dock", False)):
         manifest = []
-        extra = [("laptop", place_laptop(p, AIR13, make_laptop(AIR13)), "laptop")] if with_laptop else []
+        extra = [("laptop", place_laptop(p, mac_for(p), make_laptop(mac_for(p))), "laptop")] if with_laptop else []
         for name, part, mat in items + extra:
             fn = out / f"{set_name}__{name}.stl"
             export_stl(part, str(fn), tolerance=0.02, angular_tolerance=0.15)
             manifest.append({"file": fn.name, "material": mat})
         (out / f"{set_name}.json").write_text(json.dumps(manifest, indent=1))
+    (out / "params.json").write_text(json.dumps(asdict(p), indent=1))
+
+
+def add_p_args(ap: argparse.ArgumentParser) -> None:
+    """The fit parameters the owner may change after printing the gauge."""
+    ap.add_argument("--c", type=float, default=0.6, help="running clearance picked on the gauge comb, mm")
+    ap.add_argument("--liner", type=float, default=2.0, help="pad liner thickness: 2.0 felt, or a thin sliding tape")
+    ap.add_argument("--v-offset", type=float, default=0.0, help="shift of the pads in y, from the gauge slice")
+    ap.add_argument("--mac-t", type=float, default=11.3, help="measured Mac thickness (add a case if you use one)")
+    ap.add_argument("--pin-clr", type=float, default=0.10, help="badge eye holes over the pins: larger if tight (reprint the badge)")
+    ap.add_argument("--badge-clr", type=float, default=0.15, help="badge outline in its pocket: larger if tight (reprint the badge)")
+    ap.add_argument("--thr-usb", type=float, default=4.2, help="USB-C snap throat, mm")
+    ap.add_argument("--thr-mag", type=float, default=3.0, help="MagSafe snap throat, mm")
+
+
+def p_from_args(a: argparse.Namespace) -> P:
+    return P(mac_t=a.mac_t, c=a.c, liner_t=a.liner, v_offset=a.v_offset, pin_clr=a.pin_clr, badge_clr=a.badge_clr,
+             thr_usb=a.thr_usb, thr_mag=a.thr_mag)  # fmt: skip
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--c", type=float, default=0.6, help="running clearance picked on the gauge comb, mm")
-    ap.add_argument("--liner", type=float, default=2.0, help="pad liner thickness: 2.0 felt, 0.7 velvet sheet")
-    ap.add_argument("--v-offset", type=float, default=0.0, help="shift of the pads in y, from the gauge slice")
-    ap.add_argument("--mac-t", type=float, default=11.3, help="measured Mac thickness (add a case if you use one)")
+    add_p_args(ap)
     ap.add_argument("--out", default=str(ROOT / "print"), help="folder for the 3MF files")
     ap.add_argument("--assembly", metavar="DIR", help="only write placed meshes for renders into DIR")
     a = ap.parse_args()
-    p = P(mac_t=a.mac_t, c=a.c, liner_t=a.liner, v_offset=a.v_offset)
+    p = p_from_args(a)
     if a.assembly:
         export_assembly(p, Path(a.assembly))
         return
