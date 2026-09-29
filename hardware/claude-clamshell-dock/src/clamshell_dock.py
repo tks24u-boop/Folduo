@@ -27,6 +27,7 @@ import argparse
 import json
 import math
 import tempfile
+import warnings
 import zipfile
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -132,14 +133,14 @@ class P:
     badge_clr: float = 0.15  # badge outline inside its pocket, per side
     pin_clr: float = 0.10  # badge eye holes over the eye pins, per side (45 deg pins print fat)
     push_d: float = 2.5  # push-out hole from below
-    # cable fairleads in the rear toe and plug docks in the end face, at the port end
+    # cable fairleads in the rear toe at the port end
     cable_z: float = 8.0
     cable_turn_x: float = 88.0
     cable_turn_y: float = 76.0
     usb_y: float = 23.0
     mag_y: float = 32.0
-    thr_usb: float = 4.2  # snap throats; a cable that will not go in can be scraped wider
-    thr_mag: float = 3.0
+    usb_od: float = 4.8  # cable outer diameters: measure yours (a paper strip around it / pi)
+    mag_od: float = 3.5
     cable_ends: tuple = (1,)  # +x: the ports' end when the Apple logo faces the user
 
     def __post_init__(self):
@@ -364,29 +365,44 @@ def fairlead_profile(p: P, r: float, throat: float, lead: float) -> Sketch:
 
 def cable_cutter(p: P, shell: Part) -> Part:
     """Bottom-loaded fairleads in the +x rear toe: a straight run from the end face,
-    then a turn to the rear, wider than the cable's minimum bend radius. Where the rear
-    skirt gets too thin over the roof, the channel opens into a vertical-walled gate
-    instead of tearing through the skin at a slant. Plug docks in the end face hold
-    each plug nose-out."""
-    # y, bore radius, throat, lead-in, dock height, dock width: USB-C / Thunderbolt, then MagSafe 3
-    channels = [(p.usb_y, 2.65, p.thr_usb, 6.2, 13.4, 7.8), (p.mag_y, 1.95, p.thr_mag, 5.0, 13.6, 4.9)]
+    then a turn to the rear, wider than the cable's minimum bend radius. The cable
+    drops into a throat a little wider than itself and clicks past two short teeth, one
+    on the straight run and one in the turn, which hold it when the dock is lifted. The
+    plug head cannot pass the bore, so an unplugged cable stops at the end face instead
+    of sliding behind the desk. Where the rear skirt gets too thin over the roof, the
+    channel opens into a vertical-walled gate instead of tearing through the skin."""
     xt, yc = p.cable_turn_x, p.cable_turn_y
     axis = Axis((xt, yc, 0), (0, 0, 1))
+
+    def turned(a: float):  # about the turn axis, by a degrees along the channel
+        return Pos(xt, yc, 0) * Rot(0, 0, -a) * Pos(-xt, -yc, 0)
+
     cut = None
-    for y0, r, wt, wl, dh, dw in channels:
-        prof = fairlead_profile(p, r, wt, wl)
-        at_turn = Plane(origin=(xt, y0, 0), x_dir=(0, -1, 0), z_dir=(-1, 0, 0))
-        pl = Plane(origin=(p.x_end + 3, y0, 0), x_dir=(0, -1, 0), z_dir=(-1, 0, 0))
-        straight = extrude(pl * prof, p.x_end + 3 - xt)
-        arc = revolve(at_turn * prof, axis, -90)
+    for y0, od in ((p.usb_y, p.usb_od), (p.mag_y, p.mag_od)):
+        r, lead = (od + 0.5) / 2, od + 1.4
+        free, tooth = fairlead_profile(p, r, od + 0.3, lead), fairlead_profile(p, r, od - 0.4, lead)
+        def at(x: float) -> Plane:  # channel section at x on the straight run, facing -x
+            return Plane(origin=(x, y0, 0), x_dir=(0, -1, 0), z_dir=(-1, 0, 0))
+
+        at_turn, rad = at(xt), yc - y0
+        t1, a1, da = 93.0, 12.0, math.degrees(4.0 / rad)  # the teeth: x 93-97 and 4 mm of the turn
+        straight = (
+            extrude(at(p.x_end + 3) * free, p.x_end + 3 - (t1 + 4))
+            + extrude(at(t1 + 4) * tooth, 4)
+            + extrude(at(t1) * free, t1 - xt)
+        )
+        arc = (
+            revolve(at_turn * free, axis, -a1)
+            + revolve(turned(a1) * (at_turn * tooth), axis, -da)
+            + revolve(turned(a1 + da) * (at_turn * free), axis, -(90 - a1 - da))
+        )
         # the gate starts a degree before the skin over the roof drops under 1.2 mm
-        a0, roof, rad = 0.0, p.cable_z + r * math.sqrt(2) + 1.2, yc - y0
+        a0, roof = 0.0, p.cable_z + r * math.sqrt(2) + 1.2
         while a0 < 89 and shell.is_inside(Vector(xt - rad * math.sin(math.radians(a0)), yc - rad * math.cos(math.radians(a0)), roof)):
             a0 += 0.5
-        a0 = max(a0 - 1.0, 0.0)
-        gate = Pos(xt, yc, 0) * Rot(0, 0, -a0) * Pos(-xt, -yc, 0) * (at_turn * (Pos(0, 14) * Rectangle(wl, 32)))
-        dock = lean(p, 1) * (Pos(p.x_end, y0, p.cable_z - 0.6) * Box(4.0, dw, dh + 1.2))
-        c = straight + arc + revolve(gate, axis, -(90 - a0)) + dock
+        a0 = max(a0 - 1.0, a1 + da)
+        gate = turned(a0) * (at_turn * (Pos(0, 14) * Rectangle(lead, 32)))
+        c = straight + arc + revolve(gate, axis, -(90 - a0))
         cut = c if cut is None else cut + c
     return cut
 
@@ -453,9 +469,13 @@ def make_body(p: P) -> Part:
     body += extrude(floor * eyes, p.badge_t)
     body -= push_hole(p, floor.origin, p.zb - 1)
 
-    cut = cable_cutter(p, shell)
-    for sx in p.cable_ends:  # the other end keeps a clean Fuji section
-        body -= cut if sx > 0 else mirror(cut, Plane.YZ)
+    # the channel segments share faces that OCCT cannot merge after the booleans; the
+    # result is still one valid solid, which _ok and the mesh checks confirm
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Boolean operation unable to clean")
+        cut = cable_cutter(p, shell)
+        for sx in p.cable_ends:  # the other end keeps a clean Fuji section
+            body -= cut if sx > 0 else mirror(cut, Plane.YZ)
     return _ok(body, "body")
 
 
@@ -738,16 +758,16 @@ def add_p_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--mac-t", type=float, default=11.3, help="measured Mac thickness (add a case if you use one)")
     ap.add_argument("--pin-clr", type=float, default=0.10, help="badge eye holes over the pins: larger if tight (reprint the badge)")
     ap.add_argument("--badge-clr", type=float, default=0.15, help="badge outline in its pocket: larger if tight (reprint the badge)")
-    ap.add_argument("--thr-usb", type=float, default=4.2, help="USB-C snap throat, mm")
-    ap.add_argument("--thr-mag", type=float, default=3.0, help="MagSafe snap throat, mm")
+    ap.add_argument("--usb-od", type=float, default=4.8, help="USB-C cable diameter, mm (measure yours)")
+    ap.add_argument("--mag-od", type=float, default=3.5, help="MagSafe cable diameter, mm (measure yours)")
     ap.add_argument("--cables", choices=("right", "left", "both"), default="right",
-                    help="end with the cable channels and plug docks: right (+x) when the Apple logo faces you")
+                    help="end with the cable channels: right (+x) when the Apple logo faces you")
 
 
 def p_from_args(a: argparse.Namespace) -> P:
     ends = {"right": (1,), "left": (-1,), "both": (1, -1)}[a.cables]
     return P(mac_t=a.mac_t, c=a.c, liner_t=a.liner, v_offset=a.v_offset, pin_clr=a.pin_clr, badge_clr=a.badge_clr,
-             thr_usb=a.thr_usb, thr_mag=a.thr_mag, cable_ends=ends)  # fmt: skip
+             usb_od=a.usb_od, mag_od=a.mag_od, cable_ends=ends)  # fmt: skip
 
 
 def main() -> None:

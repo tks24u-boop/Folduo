@@ -96,7 +96,7 @@ def main() -> None:
     check(tip["liftoff_N"] >= 3.6, "stability", f"push at the Mac's top edge: far feet lift at {tip['liftoff_N']} N, "
           f"it falls at {tip['tipover_N']} N")  # fmt: skip
     info("stability", f"feet lift at a {tip['tilt_deg']} deg tilt or {tip['quake_g']} g; "
-         f"a sideways pull at the fairleads needs {tip['cable_pull_N']} N")  # fmt: skip
+         f"a cable in its channel (z {p.cable_z:.0f}) pushed sideways needs {tip['cable_pull_N']} N")  # fmt: skip
 
     # heat: share of the Mac's front face with PETG within 3 mm, on a 1 mm grid. The flat
     # face starts above the 2.5 mm edge round; nothing past the ends or above the horns
@@ -123,18 +123,16 @@ def main() -> None:
     check(dev < 0.05, "loft", f"skin within {dev:.3f} mm of the section law from x = {p.x_mid:.0f} to {p.x_horn:.0f}")
 
     # printability: faces overhanging more than 45 deg from vertical, above the first
-    # layers. The foot pocket and plug dock ceilings are short bridges; anywhere else only
-    # mesh facets of the lofts, a degree or two past 45, may show up.
+    # layers. The foot pocket ceilings are short bridges; anywhere else only mesh facets
+    # of the lofts, a degree or two past 45, may show up.
     tri, n, area = m.triangles, m.face_normals, m.area_faces
     over = np.degrees(np.arcsin(np.clip(-n[:, 2], 0, 1)))
     down = (over > 46) & (tri[:, :, 2].min(axis=1) > p.zb + 0.3) & (area > 1e-3)  # zero-area slivers print nothing
-    cz, cx = tri[:, :, 2].mean(axis=1), np.abs(tri[:, :, 0].mean(axis=1))
-    feet = down & (np.abs(cz - (p.zb + p.foot_depth)) < 0.05)
-    docks = down & ~feet & (cx > p.x_end - 5)  # their ceilings lean with the end face
-    other = down & ~feet & ~docks
+    feet = down & (np.abs(tri[:, :, 2].mean(axis=1) - (p.zb + p.foot_depth)) < 0.05)
+    other = down & ~feet
     worst = over[other].max() if other.any() else 45.0
-    check(worst < 50, "overhangs", f"bridges: foot pocket ceilings {area[feet].sum():.0f} mm2, plug dock ceilings "
-          f"{area[docks].sum():.0f} mm2; elsewhere at most {worst:.0f} deg from vertical")  # fmt: skip
+    check(worst < 50, "overhangs", f"bridges: foot pocket ceilings {area[feet].sum():.0f} mm2; "
+          f"elsewhere at most {worst:.0f} deg from vertical")  # fmt: skip
 
     teeth = gauge["comb"] & Pos(0, 0, 7) * Box(300, 0.2, 0.2)
     thin = min(s.bounding_box().size.X for s in teeth.solids())
