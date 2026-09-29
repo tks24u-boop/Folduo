@@ -86,10 +86,10 @@ class P:
     felt_t: float = 2.0  # V strips
     v_offset: float = 0.0  # moves both pad pairs in +y if the Mac seats off-centre
     pad_sag: float = 0.05  # the Mac's weight bends the web and closes each pad gap this much (FE)
-    # frame
+    # frame: the V stands on a 4.9 mm web under its grit floor, stiff enough that the
+    # Mac's weight closes each pad gap by only pad_sag (a 3.4 mm web let it close 0.1 mm)
     za: float = 3.6  # virtual apex of the 45 deg V
-    zg: float = 6.1  # grit floor at the bottom of the V: the web under it is 4.9 mm, stiff
-    # enough that the Mac's weight closes the pad gap by only about 0.05 mm per side
+    zg: float = 6.1  # grit floor at the bottom of the V
     gw: float = 2.5  # grit floor half width
     # section family: constant middle, smootherstep transition, constant horn
     x_mid: float = 42.0
@@ -108,7 +108,7 @@ class P:
     end_lean: float = 7.0  # end faces lean inward, so each peak tapers to a trapezoid
     end_chamfer: float = 1.5
     r_plan: float = 6.0  # toe-tip plan corners
-    # pad lands on the horn relief walls, about 35 mm above the V contact
+    # pad lands on the horn relief walls, 33 mm above the V contact
     land_x0: float = 78.5
     land_x1: float = 91.5  # clear of the leaning, chamfered end face
     land_z0: float = 38.3
@@ -132,7 +132,7 @@ class P:
     badge_clr: float = 0.15  # badge outline inside its pocket, per side
     pin_clr: float = 0.10  # badge eye holes over the eye pins, per side (45 deg pins print fat)
     push_d: float = 2.5  # push-out hole from below
-    # cable fairleads (rear toes, both ends) and plug docks in the end faces
+    # cable fairleads in the rear toe and plug docks in the end face, at the port end
     cable_z: float = 8.0
     cable_turn_x: float = 88.0
     cable_turn_y: float = 76.0
