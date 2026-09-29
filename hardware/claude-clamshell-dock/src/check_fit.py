@@ -7,7 +7,8 @@ clamshell_dock.py, e.g.  python3 check_fit.py --c 0.4 --liner 0.3
    strips, clear of their edges, with c/2 to each pad liner
 4. stability: top-edge push, tip angle, cable pull
 5. how much of the Mac's face lies close to PETG (heat)
-6. printability: overhangs past 45 deg, and the gauge comb's teeth
+6. the lofted skin between the pass and the peaks follows the section law
+7. printability: overhangs past 45 deg, and the gauge comb's teeth
 Exits non-zero and names the failed checks if anything is off.
 """
 
@@ -17,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 import trimesh
-from build123d import Box, Pos, Vector
+from build123d import Axis, Box, Pos, Vector
 
 from clamshell_dock import (
     add_p_args,
@@ -28,13 +29,14 @@ from clamshell_dock import (
     make_gauge,
     make_laptop,
     p_from_args,
+    section_face,
     place_badge,
     place_laptop,
     stability,
     stl_mesh,
 )
 
-DOCK_KG = 0.214  # PETG body 209 g (PrusaSlicer, 5 walls, 20 % gyroid) + badge, felt and feet
+DOCK_KG = 0.190  # PETG body 185 g (PrusaSlicer, 0.16 mm, 5 walls, 20 % gyroid) + badge, felt and feet
 failed: list[str] = []
 
 
@@ -87,12 +89,14 @@ def main() -> None:
         check(d < 0.07 and edge > 1.5, name, f"Mac rests on it (gap {max(d - 0.05, 0):.2f} mm), {edge:.1f} mm inside its edge")
     for name in ("pad_rb", "pad_rf", "pad_lb", "pad_lf"):
         gap = shifted.distance_to(felt[name])
-        check(abs(gap - p.c / 2) < 0.05, name, f"{gap:.2f} mm from the Mac (c/2 = {p.c / 2:.2f})")
+        want = p.c / 2 + p.pad_sag  # the Mac's weight takes pad_sag off, in the real, flexible dock
+        check(abs(gap - want) < 0.02, name, f"{gap:.2f} mm from the Mac unloaded, {gap - p.pad_sag:.2f} under its weight")
 
     tip = stability(p, lp, DOCK_KG, body.center().Z)
-    check(tip["push_at_top_N"] >= 3.9, "stability", f"{tip['push_at_top_N']} N at the Mac's top edge starts a tip")
-    info("stability", f"pivot {tip['pivot_mm']} mm, tips over past {tip['tip_angle_deg']} deg, "
-         f"cable pulled sideways at the fairleads: {tip['cable_pull_to_tip_N']} N")  # fmt: skip
+    check(tip["liftoff_N"] >= 3.6, "stability", f"push at the Mac's top edge: far feet lift at {tip['liftoff_N']} N, "
+          f"it falls at {tip['tipover_N']} N")  # fmt: skip
+    info("stability", f"feet lift at a {tip['tilt_deg']} deg tilt or {tip['quake_g']} g; "
+         f"a sideways pull at the fairleads needs {tip['cable_pull_N']} N")  # fmt: skip
 
     # heat: share of the Mac's front face with PETG within 3 mm, on a 1 mm grid. The flat
     # face starts above the 2.5 mm edge round; nothing past the ends or above the horns
@@ -104,21 +108,35 @@ def main() -> None:
     dist = np.concatenate([trimesh.proximity.closest_point(m, chunk)[1] for chunk in np.array_split(grid, 20)])
     info("heat", f"PETG within 3 mm of the Mac on {(dist < 3.0).sum() / (lp.width * lp.depth):.1%} of its front face")
 
+    # the loft between the pass and the peaks against the section law, on the crest and
+    # the flank, front and back (a sparse loft once sagged 0.4 mm just past x = 42)
+    dev = 0.0
+    for x in np.arange(p.x_mid + 0.5, p.x_horn, 1.0):
+        edges = [np.array([(v.Y, v.Z) for v in (e.position_at(t) for t in np.linspace(0, 1, 200))]) for e in section_face(p, x).edges()]
+        for y in (-22.0, -17.0, 17.0, 22.0):
+            law = max(
+                a[1] + (b[1] - a[1]) * (y - a[0]) / (b[0] - a[0])
+                for pts in edges for a, b in zip(pts[:-1], pts[1:]) if min(a[0], b[0]) <= y <= max(a[0], b[0]) and a[0] != b[0]
+            )  # fmt: skip
+            skin = max(v[0].Z for v in body.find_intersection_points(Axis((x, y, 200), (0, 0, -1))))
+            dev = max(dev, abs(skin - law))
+    check(dev < 0.05, "loft", f"skin within {dev:.3f} mm of the section law from x = {p.x_mid:.0f} to {p.x_horn:.0f}")
+
     # printability: faces overhanging more than 45 deg from vertical, above the first
     # layers. The foot pocket and plug dock ceilings are short bridges; anywhere else only
     # mesh facets of the lofts, a degree or two past 45, may show up.
     tri, n, area = m.triangles, m.face_normals, m.area_faces
     over = np.degrees(np.arcsin(np.clip(-n[:, 2], 0, 1)))
-    down = (over > 46) & (tri[:, :, 2].min(axis=1) > p.zb + 0.3)
+    down = (over > 46) & (tri[:, :, 2].min(axis=1) > p.zb + 0.3) & (area > 1e-3)  # zero-area slivers print nothing
     cz, cx = tri[:, :, 2].mean(axis=1), np.abs(tri[:, :, 0].mean(axis=1))
     feet = down & (np.abs(cz - (p.zb + p.foot_depth)) < 0.05)
-    docks = down & ~feet & (cx > p.x_end - 3)
+    docks = down & ~feet & (cx > p.x_end - 5)  # their ceilings lean with the end face
     other = down & ~feet & ~docks
     worst = over[other].max() if other.any() else 45.0
     check(worst < 50, "overhangs", f"bridges: foot pocket ceilings {area[feet].sum():.0f} mm2, plug dock ceilings "
           f"{area[docks].sum():.0f} mm2; elsewhere at most {worst:.0f} deg from vertical")  # fmt: skip
 
-    teeth = gauge["comb"] & Pos(0, 7, 4.75) * Box(300, 0.2, 0.2)
+    teeth = gauge["comb"] & Pos(0, 0, 7) * Box(300, 0.2, 0.2)
     thin = min(s.bounding_box().size.X for s in teeth.solids())
     check(thin >= 2.0, "gauge comb", f"thinnest tooth {thin:.1f} mm")
 

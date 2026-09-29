@@ -28,9 +28,10 @@ def lin(hex_rgb: str) -> tuple:
 
 
 PALETTES = {
-    # black PETG body, Clawd in orange glow PLA, grey felt, MacBook Air in Midnight
-    "studio": {"petg": "#141416", "glow": "#FF9D5B", "white": "#EDEDE8", "felt": "#38383A", "rubber": "#1E1E1E",
-               "laptop": "#2B313B", "floor": "#CBC5BA"},
+    # black PETG body, Clawd in orange glow PLA, black felt, MacBook Air in Silver: the
+    # light Mac shows the dock's real visual weight, where Midnight would hide it
+    "studio": {"petg": "#141416", "glow": "#FF9D5B", "white": "#EDEDE8", "felt": "#232325", "rubber": "#1E1E1E",
+               "laptop": "#D6D7D9", "floor": "#CBC5BA"},
 }
 
 MATERIAL_FINISH = {  # roughness, metallic
@@ -45,6 +46,8 @@ MATERIAL_FINISH = {  # roughness, metallic
 
 SHOTS = [
     {"name": "hero", "set": "assembled", "cam": (420, -720, 260), "target": (0, 0, 100), "lens": 58},
+    # what the owner sees from the chair: eye 450 mm above the desk, 650 mm away
+    {"name": "seat", "set": "assembled", "cam": (0, -650, 450), "target": (0, 0, 80), "lens": 42},
     {"name": "dock", "set": "dock", "cam": (240, -340, 200), "target": (0, 0, 22), "lens": 55},
     {"name": "end", "set": "dock", "cam": (-470, -40, 70), "target": (0, 0, 28), "lens": 60},
     {"name": "rear", "set": "dock", "cam": (330, 380, 210), "target": (40, 0, 18), "lens": 55},
@@ -71,8 +74,9 @@ def look_at(obj, target: Vector) -> None:
     obj.rotation_euler = (target - obj.location).to_track_quat("-Z", "Y").to_euler()
 
 
-def sweep(mat, back: float, radius: float = 0.6, width: float = 8.0) -> None:
-    """Seamless studio backdrop: floor that curves up into a wall behind the product."""
+def sweep(mat, back: float, yaw: float = 0.0, radius: float = 0.6, width: float = 8.0) -> None:
+    """Seamless studio backdrop: floor that curves up into a wall behind the product,
+    turned by yaw about the vertical so the wall faces the camera."""
     prof = [(-4.0, 0.0), (back - radius, 0.0)]
     for i in range(1, 17):
         a = math.pi / 2 * i / 16
@@ -86,6 +90,7 @@ def sweep(mat, back: float, radius: float = 0.6, width: float = 8.0) -> None:
     for poly in mesh.polygons:
         poly.use_smooth = True
     ob = bpy.data.objects.new("sweep", mesh)
+    ob.rotation_euler = (0.0, 0.0, yaw)
     bpy.context.scene.collection.objects.link(ob)
     ob.data.materials.append(mat)
 
@@ -121,10 +126,11 @@ def render(shot: dict, asm: Path, out: Path, samples: int, scale: float) -> None
         bpy.ops.wm.stl_import(filepath=str(asm / item["file"]))
         ob = bpy.context.selected_objects[0]
         ob.data.materials.append(mats[item["material"]])
+        # smooth the mesh facets (under 5 deg apart) but keep real creases, such as the 20 deg toe tab
         try:
-            bpy.ops.object.shade_smooth_by_angle(angle=math.radians(32))
+            bpy.ops.object.shade_smooth_by_angle(angle=math.radians(12))
         except Exception:
-            bpy.ops.object.shade_auto_smooth(angle=math.radians(32))
+            bpy.ops.object.shade_auto_smooth(angle=math.radians(12))
         objs.append(ob)
     # STL is in mm; the scene is in metres. Parent everything to one empty.
     root = bpy.data.objects.new("root", None)
@@ -133,7 +139,8 @@ def render(shot: dict, asm: Path, out: Path, samples: int, scale: float) -> None
         ob.parent = root
     root.scale = (0.001, 0.001, 0.001)
 
-    sweep(mats["floor"], back=0.9)
+    view = Vector(shot["target"]) - Vector(shot["cam"])
+    sweep(mats["floor"], back=0.9, yaw=math.atan2(-view.x, view.y))  # the wall behind, as the camera sees it
 
     cam = bpy.data.cameras.new("cam")
     cam.lens = shot["lens"]

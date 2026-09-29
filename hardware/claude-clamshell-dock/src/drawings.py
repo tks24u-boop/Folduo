@@ -66,6 +66,7 @@ def main() -> None:
     felts = [load(n) for n in ("felt_vr", "felt_vl", "pad_rb", "pad_rf", "pad_lb", "pad_lf")]
     badge, badge_white = load("badge_glow"), load("badge_white")
     X, Y = p.x_end, p.yt_horn
+    length = body.bounds[1][0] - body.bounds[0][0]  # at the foot of the leaning ends
     lp, seal = mac_for(p), seal_plane(p).origin
 
     fig = plt.figure(figsize=(17, 11), dpi=130)
@@ -76,7 +77,7 @@ def main() -> None:
     silhouette(ax, body, BODY, (0, 2))
     silhouette(ax, badge, GLOW, (0, 2), z=2)
     ax.axhline(0, color=DIM, lw=0.6)
-    dim(ax, (-X, -8), (X, -8), f"{2 * X:.0f}")
+    dim(ax, (-length / 2, -8), (length / 2, -8), f"{length:.0f}（端面は{p.end_lean:.0f}°内側に傾く）")
     dim(ax, (X + 8, 0), (X + 8, p.h_horn), f"{p.h_horn:.0f}", vertical=True)
     dim(ax, (-p.x_mid, p.h_mid + 6), (p.x_mid, p.h_mid + 6), f"低い峠 {2 * p.x_mid:.0f}（高さ{p.h_mid:.0f}）", fs=7)
     ax.text(-X, p.h_horn + 8, f"ゴム脚{p.zb:.1f} mm込みの高さ。中央は低く（Macのヒンジの熱い部分を空気にさらす）、両端の峰で支える",
@@ -95,9 +96,9 @@ def main() -> None:
             ax.plot(pts[:, 0], pts[:, 1], color=color, lw=lw, ls=ls)
     silhouette(ax, badge, GLOW, (0, 1), z=2)
     ax.text(-X, Y + 14, f"実線：床面と高さ50 mmの断面　破線：高さ{p.cable_z:.0f} mm（ケーブルの通り道が見える）", fontsize=8, color=DIM)
-    dim(ax, (-X, -Y - 9), (X, -Y - 9), f"{2 * X:.0f}")
+    dim(ax, (-length / 2, -Y - 9), (length / 2, -Y - 9), f"{length:.0f}")
     dim(ax, (X + 9, -Y), (X + 9, Y), f"{2 * Y:.0f}（脚の外側 {2 * (p.foot_y + p.foot_dia / 2):.0f}）", vertical=True, offset=(4, 0))
-    ax.annotate("ケーブルの通り道（USB-C／MagSafe）\n両端の後ろ側。下から押し込む", xy=(X - 12, 30), xytext=(X - 95, Y + 4),
+    ax.annotate("ケーブルの通り道（USB-C／MagSafe）\n右端の後ろ側。下から押し込む", xy=(X - 12, 28), xytext=(X - 95, Y + 4),
                 fontsize=7, color=INK, arrowprops=dict(arrowstyle="-", color=DIM, lw=0.6))
     ax.set_xlim(-X - 8, X + 30)
     ax.set_ylim(-Y - 16, Y + 22)
