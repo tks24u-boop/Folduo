@@ -395,7 +395,9 @@ def land_solid(p: P, sx: int, sy: int) -> Part:
     """One pad land: a y-z profile rooted 0.6 mm inside the relief wall, with tangent
     ramps up to the land face and back, extruded along x. The Mac only ever slides past
     rounded ramps, never a crease."""
-    w, f = section_pts(p, p.land_x0)["TR2"][0], p.land_face(sy)  # the wall, widest where the land starts
+    # the ramps start 0.05 mm inside the wall, which is widest where the land starts: a
+    # ramp ending exactly on the wall leaves a knife-edge contact that meshes badly
+    w, f = section_pts(p, p.land_x0)["TR2"][0] + 0.05, p.land_face(sy)
     z0, z1, r = p.land_z0, p.land_z1, p.land_ramp
     r0 = max(r, 2 * (w - f))  # the lower ramp overhangs: its steepest point is atan(2 rise / r0) <= 45 deg
     pts = [(w + 0.6, z0 - r0), (w, z0 - r0), (f, z0), (f, z1), (w, z1 + r), (w + 0.6, z1 + r)]
