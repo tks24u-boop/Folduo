@@ -1,5 +1,51 @@
 # リサーチ：縦置きクラムシェルスタンドの採寸・長所・短所
 
+## 0. 再調査（2026年9月29日）
+
+3版（TŌGE）を作る前に、7つの観点で調べ直しました。観点は、海外の高級品、口コミの不満、国内製品、3Dプリント作例、MacBook Air M5の仕様、素材と印刷、造形の考え方です。1〜5章は最初の調査（9月28日）のままです。
+
+### 不満の多い順（独立した出典の数）
+
+| 順 | 不満 | 出典の数と例 | 3版での対策 |
+|---|---|---|---|
+| 1 | 倒れる。手が触れる、ケーブルを引っかける、斜めに置くと台ごと倒れる | 約18件。[WIRED](https://www.wired.com/review/twelve-south-bookarc-flex-vertical-laptop-stand/)はBookArc Flexに3/10。[iMore](https://www.imore.com/accessories/twelve-south-bookarc-flex-review)では13インチAirを含む2台とも倒れた。Twelve South自身が猫のいる家には別の型を勧めている | 裾を138 mmに広げ、脚をその先端へ。4.2 N・33°。ヒンジ下に差してポートを低くし、ケーブルは高さ8 mmで押さえる |
+| 2 | 11.3 mmのAirだと緩い、揺れる | 約15件。[Grovemade](https://grovemade.com/product/wood-macbook-dock/)は「M2 Airは薄すぎて遊びが出る」と明記。[BookArc Flex](https://twelvesouth.com.au/products/bookarc-flex)はM2〜M5 Air非対応。調整式の最小幅は14〜16 mm（[MONOQLO](https://360life.shinyusha.co.jp/articles/-/41019)） | 45°のV溝で角を受けて中央に座らせ、上は片側0.3 mmあけたパッドで揺れを3 mm以内に |
+| 3 | ケーブルの行き場がない。抜くと机の裏へ落ちる | 約11件。[WIRED](https://www.wired.com/review/twelve-south-bookarc-flex-vertical-laptop-stand/)はFlexがCable Catchをなくしたことを指摘。[TechTwo](https://www.techtwo.tv/reviews/satechi-aluminum-vertical-laptop-stand-review/)、[MacTrast](https://www.mactrast.com/2012/12/review-rain-design-mtower-for-macbooks/) | 両端の後ろに下から押し込む溝と、端面のプラグ置き場 |
+| 4 | 抜くとドックが一緒に持ち上がる。両手が要る | 約11件。[9to5Mac](https://9to5mac.com/2016/03/07/grovemade-macbook-dock-review/)（Grovemade）、[mTower](https://www.amazon.com/dp/B00A42Y0PA)、[note](https://note.com/clow_luna/n/n5ba2098bfb5e) | 何も挟まない。V溝は持ち上げた瞬間に離れる |
+| 5 | 傷が付く。入口の硬い角、縁を覆わないパッド、中央の仕切り、砂ぼこり | 約12件（心配の声も含む）。[Chamsaler](https://digimaroblog.com/chamsaler-pc-stand-review/)、[Brydge](https://geardiary.com/2021/07/05/brydge-vertical-dock-review/) | 入口はラッパ形に丸める。触れるのはフェルトだけ。パッドの縁はフェルトより0.5 mm奥 |
+| 6 | 熱。ファンレスのAirはクラムシェルで性能が落ちる | 約10件。M3 Airは20分の負荷でふたを閉じると初回の約52%、開けると約73%（[Macworld](https://www.macworld.com/article/2269055/m3-macbook-air-clamshell-display-mode-throttling-performance.html)）。スタンドが原因だという測定はない | 触れる面を最小にし、中央は開ける。冷却効果はうたわない |
+| 7 | 安っぽい。プラスチック感、むき出しの縁、ネジ、かさばる | 約10件と、1版への持ち主の評価（太すぎる） | 継ぎ目のない一体の形、端面の断面を見せる、1 mmの面取りで統一 |
+| 8 | インサートやライナーがなくなる、外れる、粘着がずれる | 約7件。[mTower](https://talk.macpowerusers.com/t/rain-design-mtower-or-bookarc/28380)のアダプター紛失、[Oakywood](https://oakywood.shop/blogs/news/laptop-dock-stand-updates)は貼るフェルトをネジ留めに変更 | フェルトは縁のあるくぼみに貼る。外れる部品は作らない |
+| 9 | 差し込みにコツがいる。まっすぐでないと入らない | 約6件。[Brydge](https://geardiary.com/2021/07/05/brydge-vertical-dock-review/)は3回ほどやり直した | 入口はどこでも31 mm。V溝が中央に導く |
+| 10 | 机の上で滑る、貼った脚がはがれる | 約6件。[The Observatory](https://www.printables.com/model/110647-the-observatory-a-parametric-vertical-laptop-stand)は脚なしで滑る | ゴム脚を深さ0.8 mmのくぼみに入れ、横にずれないようにする |
+
+### 手本にしたもの
+
+- **Twelve South BookArc**（158 g、214.8×91.4×55.8 mm）：機種専用のインサートで隙間なく座らせ、脚の間の切り欠き（Cable Catch）でケーブルを受ける。フィットとケーブル受けの大切さ。
+- **BookArc Flex**：デザイン賞を取ったが、WIREDは倒れるとして3/10。見た目だけでは製品にならない。
+- **Grovemade**：「見た目の量感を減らし、実際は重くした」。空の状態でも美しいこと。
+- **Rain Design mTower**（665 g、奥行114 mm）：一体で緩む所がない。計算上この分野で一番倒れにくい。
+- **Brydge**：差し込むと自然に位置が決まる案内。
+- **MakerWorldの作例**：ロゴを別に平らに刷ってはめ込むと仕上がりが良い（[2574960](https://3dsearch.net/model/apple-macbook-air-vertical-stand-m2-m3-m4-m5-mw2574960)）。PETGで一体・サポートなし（[FlorinV](https://makerworld.com/en/models/783520-vertical-laptop-stand)）。
+
+### 分かった事実
+
+- MacBook Air 13（M5）：1.13×30.41×21.5 cm、1.23 kg。左にMagSafe 3とThunderbolt 4×2（[Apple](https://support.apple.com/en-us/126320)）。ふたを開けたままでも外部ディスプレイを2台使える（[Apple](https://support.apple.com/en-us/122212)）。
+- 負荷時の表面温度（ふたを開けた状態、室温21.5 °C）：ヒンジ側が40〜44 °C、手前側が30〜33 °C（[Notebookcheck](https://www.notebookcheck.net/Insane-performance-and-efficiency-without-fans-Apple-MacBook-Air-13-M5-Entry-Review.1242707.0.html)）。
+- AppleがMac用に公開している寸法図はMacBook Neoだけで、「金属を当てない」「ポートとアンテナをふさがない」と書かれている（[Apple](https://developer.apple.com/accessories/dimensional-drawings/)）。
+- USB-Cの抜き差しには5〜20 Nかかる（[USB-IF](https://usb.org/sites/default/files/USB%20Type-C_Compliance%20Document_Rev_2_1b_June_2021.pdf)）。TB4ケーブルは太さ4.6〜5.0 mm、最小曲げ半径48 mm（[StarTech](https://media.startech.com/cms/pdfs/tblt4mm1m_datasheet.pdf)）。
+- 荷重たわみ温度（0.45 MPa）：PLA Basic 57 °C、PLA Glow 55 °C、PETG HF 69 °C、PETG Basic（2026）71 °C（BambuのTDS）。45 °Cでの荷重試験で、PLAは大きく変形し、PETGはほとんど変わらなかった（MyTechFun）。
+- PLAとPETGはほとんど接着しない（[Bambu Wiki](https://wiki.bambulab.com/en/filament-acc/filament/h2d-pla-and-petg-mutual-support)）。
+- Bambuの蓄光はPLA Glowだけで、緑・黄・ピンク・青・オレンジがある（[Bambu Store](https://jp.store.bambulab.com/products/pla-glow)）。研磨性があり硬化ノズルが要る（P2Sは標準で硬化鋼ノズル）。明るさは厚さ約2 mmまで増え、2時間で約1割になる（[CNC Kitchen](https://www.cnckitchen.com/blog/which-glow-in-the-dark-filament-is-the-best)）。
+- フェルトは10%押しつぶすのに6.9〜145 kPaかかる（[SAE規格](https://usfelt.com/sae_felt_specs.html)）。挟む力を2 mmのフェルトに頼ると、軽い台はMacと一緒に持ち上がる。
+- 倒れにくさを試す規格：IEC 60335-1は10°の斜面で倒れないこと。
+
+### 調べきれなかったこと
+
+- Amazonの全文レビュー、MakerWorldのコメント、Reddit、価格.comは、JavaScriptが必要だったりブロックされたりして読めなかった。Amazonは「Customers say」の要約と上位のレビューだけを使った。
+- Air M5のヒンジ側の角の丸み、ポートの位置、重心は公表されていない。ゲージと実測で確かめる。
+- 市販品の倒れにくさの数値は、どれも寸法と重さからの計算で、測定ではない。
+
 調査日は2026年9月28日です。数値はメーカーの公式ページを優先し、無い場合は販売店の仕様欄を使いました。レビューはWIRED、iMore、How-To Geek、MacRumors、9to5Mac、ITmedia、Amazon.co.jpなどです。redditは取得できませんでした。不明な値は「—」としています。
 
 ## 1. 市販品（21製品）

@@ -5,7 +5,8 @@
     python render_blender.py /tmp/asm ../images [--quick]
 
 The assembly folder holds <set>__<part>.stl plus <set>.json manifests written by
-clamshell_dock.py. Each shot below picks a set, a colour palette and a camera.
+clamshell_dock.py. Each shot below picks a set and a camera; the night shot turns the
+lights down and lets the glow badge emit.
 """
 
 import json
@@ -27,16 +28,15 @@ def lin(hex_rgb: str) -> tuple:
 
 
 PALETTES = {
-    # Claude's warm ivory and terracotta, grey felt, MacBook Air in Midnight.
-    # "orange" is pre-compensated: under AgX Punchy it renders as ~#D77757 (Clawd orange).
-    "ivory": {"body": "#E9E2D3", "orange": "#BF4524", "black": "#161616", "felt": "#3A3A3C", "rubber": "#1E1E1E",
-              "laptop": "#2B313B", "floor": "#B9B2A6"},
+    # black PETG body, Clawd in orange glow PLA, grey felt, MacBook Air in Midnight
+    "studio": {"petg": "#141416", "glow": "#FF9D5B", "white": "#EDEDE8", "felt": "#38383A", "rubber": "#1E1E1E",
+               "laptop": "#2B313B", "floor": "#CBC5BA"},
 }
 
 MATERIAL_FINISH = {  # roughness, metallic
-    "body": (0.58, 0.0),
-    "orange": (0.5, 0.0),
-    "black": (0.5, 0.0),
+    "petg": (0.36, 0.0),  # satin, as black PETG prints
+    "glow": (0.55, 0.0),
+    "white": (0.6, 0.0),
     "felt": (0.95, 0.0),
     "rubber": (0.8, 0.0),
     "laptop": (0.33, 1.0),
@@ -44,12 +44,16 @@ MATERIAL_FINISH = {  # roughness, metallic
 }
 
 SHOTS = [
-    {"name": "hero", "set": "assembled", "palette": "ivory", "cam": (470, -760, 250), "target": (0, 0, 95), "lens": 58},
-    {"name": "dock", "set": "dock", "palette": "ivory", "cam": (230, -330, 190), "target": (0, 0, 12), "lens": 60},
+    {"name": "hero", "set": "assembled", "cam": (420, -720, 260), "target": (0, 0, 100), "lens": 58},
+    {"name": "dock", "set": "dock", "cam": (240, -340, 200), "target": (0, 0, 22), "lens": 55},
+    {"name": "end", "set": "dock", "cam": (-470, -40, 70), "target": (0, 0, 28), "lens": 60},
+    {"name": "rear", "set": "dock", "cam": (330, 380, 210), "target": (40, 0, 18), "lens": 55},
+    # lights out: only the glow badge and a faint blue night fill
+    {"name": "night", "set": "assembled", "cam": (300, -640, 190), "target": (0, 0, 60), "lens": 58, "night": True},
 ]
 
 
-def material(name: str, hex_rgb: str) -> bpy.types.Material:
+def material(name: str, hex_rgb: str, glow: float = 0.0) -> bpy.types.Material:
     rough, metal = MATERIAL_FINISH[name]
     m = bpy.data.materials.new(name)
     m.use_nodes = True
@@ -57,6 +61,9 @@ def material(name: str, hex_rgb: str) -> bpy.types.Material:
     b.inputs["Base Color"].default_value = lin(hex_rgb)
     b.inputs["Roughness"].default_value = rough
     b.inputs["Metallic"].default_value = metal
+    if glow:  # afterglow of the phosphor
+        b.inputs["Emission Color"].default_value = lin(hex_rgb)
+        b.inputs["Emission Strength"].default_value = glow
     return m
 
 
@@ -104,8 +111,9 @@ def render(shot: dict, asm: Path, out: Path, samples: int, scale: float) -> None
     sc.view_settings.view_transform = "AgX"
     sc.view_settings.look = "AgX - Punchy"
     sc.view_settings.exposure = shot.get("exposure", 0.0)
-    pal = PALETTES[shot["palette"]]
-    mats = {k: material(k, v) for k, v in pal.items()}
+    night = shot.get("night", False)
+    pal = PALETTES["studio"]
+    mats = {k: material(k, v, glow=3.0 if night and k == "glow" else 0.0) for k, v in pal.items()}
 
     manifest = json.loads((asm / f"{shot['set']}.json").read_text())
     objs = []
@@ -135,15 +143,16 @@ def render(shot: dict, asm: Path, out: Path, samples: int, scale: float) -> None
     cam_ob.location = Vector(shot["cam"]) / 1000
     look_at(cam_ob, Vector(shot["target"]) / 1000)
 
-    area_light("key", (-600, -700, 900), 70, 1.2)
-    area_light("fill", (900, -300, 350), 18, 1.5)
-    area_light("rim", (200, 900, 700), 45, 1.0)
+    dim = 0.012 if night else 1.0
+    area_light("key", (-600, -700, 900), 70 * dim, 1.2)
+    area_light("fill", (900, -300, 350), 18 * dim, 1.5)
+    area_light("rim", (200, 900, 700), 45 * dim, 1.0)
     world = bpy.data.worlds.new("w")
     sc.world = world
     world.use_nodes = True
     bg = world.node_tree.nodes["Background"]
-    bg.inputs[0].default_value = lin(pal["floor"])
-    bg.inputs[1].default_value = 0.12
+    bg.inputs[0].default_value = lin("#22304A" if night else pal["floor"])
+    bg.inputs[1].default_value = 0.02 if night else 0.12
 
     sc.render.image_settings.file_format = "JPEG"
     sc.render.image_settings.quality = 92

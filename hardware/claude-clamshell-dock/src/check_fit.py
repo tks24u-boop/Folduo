@@ -1,69 +1,95 @@
 """Geometry checks to run after changing parameters.
 
-    python3 check_fit.py [--model air13]
+    python3 check_fit.py [--c 0.6]
 
-1. the printed parts are valid solids
-2. the logo insert does not collide with its pocket
-3. the MacBook stand-in touches neither the PLA nor the felt, and how much play is left
-4. tipping margins with this body for every MacBook
-5. how much of the MacBook the dock covers (heat)
+1. the body, badge and gauge are valid solids with closed meshes
+2. the badge does not collide with its pocket and eye pins
+3. the Mac stand-in, seated hinge-down, touches no PETG, and the felt only in the V
+4. stability: top-edge push, tip angle, cable pull
+5. how much of the Mac lies close to PETG (heat)
+6. overhangs steeper than 45 deg that face down (printability)
 """
 
 import argparse
+import tempfile
+from pathlib import Path
+
+import numpy as np
+import trimesh
 
 from clamshell_dock import (
-    LAPTOPS,
+    AIR13,
     P,
-    felt_strips,
+    liners,
+    make_badge_parts,
     make_body,
+    make_gauge,
     make_laptop,
-    make_logo_parts,
+    place_badge,
     place_laptop,
-    place_logo,
-    stability_report,
+    stability,
+    stl_mesh,
 )
 
-DOCK_KG = 0.10  # 95 g PLA (PrusaSlicer, 3 walls, 15 % infill) + felt, feet and logo
+DOCK_KG = 0.215  # PETG body 211 g (PrusaSlicer, 5 walls, 20 % gyroid) + badge, felt and feet
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="air13", choices=sorted(LAPTOPS))
-    p = P(model=ap.parse_args().model)
-    lp = p.laptop
+    ap.add_argument("--c", type=float, default=0.6)
+    p = P(c=ap.parse_args().c)
     ok = True
 
     body = make_body(p)
-    logo = make_logo_parts(p)
-    for name, part in {"body": body, **logo}.items():
-        ok &= part.is_valid
-        print(f"solid   {name:12s} valid={part.is_valid} volume={part.volume / 1000:6.2f} cm3")
+    badge = make_badge_parts(p)
+    with tempfile.TemporaryDirectory() as d:
+        for name, part in {"body": body, "gauge": make_gauge(p), **badge}.items():
+            stl_mesh(part, Path(d) / f"{name}.stl", 0.02)  # raises if the mesh leaks
+            ok &= part.is_valid
+            print(f"solid   {name:12s} valid={part.is_valid} closed mesh, {part.volume / 1000:6.2f} cm3")
 
-    insert = place_logo(p, logo["logo_orange"]) + place_logo(p, logo["logo_eyes"])
+    insert = place_badge(p, badge["badge_glow"]) + place_badge(p, badge["badge_white"])
     v = (insert & body).volume
     ok &= v < 1e-6
-    print(f"clash   logo insert / body      {v:.3f} mm3")
+    print(f"clash   badge / body              {v:.3f} mm3")
 
-    mac = place_laptop(p, make_laptop(lp))
+    mac = place_laptop(p, AIR13, make_laptop(AIR13))
     v = (mac & body).volume
     ok &= v < 1e-6
-    print(f"fit     {lp.label} / PLA         {v:.3f} mm3")
-    for name, felt in felt_strips(p).items():
-        gap = mac.distance_to(felt)
-        v = (mac & felt).volume
-        ok &= v < 1e-6
-        print(f"fit     {lp.label} / {name:10s} gap {gap:.2f} mm")
-    print(f"fit     slot {p.slot_w:.2f} mm, the Mac sticks out {(lp.width - p.length) / 2:.1f} mm at each end")
+    print(f"fit     Mac seated at z {p.seat_z():.2f} / PETG  {v:.3f} mm3, closest PETG {mac.distance_to(body):.2f} mm")
+    for name, liner in liners(p).items():
+        gap, v = mac.distance_to(liner), (mac & liner).volume
+        ok &= v < 1e-6 and (liner & body).volume < 1e-6
+        print(f"fit     {name:9s} gap {gap:.2f} mm")
 
-    cg_z = body.center().Z
-    for row in stability_report(p, DOCK_KG, cg_z):
-        print(f"tip     {row['model']:26s} {row['tip_angle_deg']:5.1f} deg, {row['push_at_top_N']:4.2f} N at the top edge")
+    for k, val in stability(p, AIR13, DOCK_KG, body.center().Z).items():
+        print(f"tip     {k:20s} {val}")
 
-    covered_h = p.height - p.laptop_z
-    face = lp.width * lp.depth
-    print(f"heat    covers {covered_h:.0f} mm x {p.length:.0f} mm of each face = {covered_h * p.length / face:.1%} of it")
+    # heat: share of the Mac's front face with PETG within 3 mm (1 mm grid; nothing
+    # beyond the dock's length or above the horns can be that close)
+    m = trimesh.Trimesh(*_mesh(body))
+    xs = np.arange(-p.x_end - 1, p.x_end + 1.01, 1.0)
+    zs = np.arange(p.seat_z(), p.h_horn + 1.01, 1.0)
+    grid = np.array([(x, -p.mac_t / 2, z) for x in xs for z in zs])
+    dist = np.concatenate([trimesh.proximity.closest_point(m, chunk)[1] for chunk in np.array_split(grid, 20)])
+    near = (dist < 3.0).sum() / (AIR13.width * AIR13.depth)
+    print(f"heat    PETG within 3 mm of the Mac on {near:.1%} of each face")
+
+    # printability: downward faces steeper than 45 deg, above the first layer
+    tri = m.triangles
+    n = m.face_normals
+    low = tri[:, :, 2].min(axis=1)
+    bad = (n[:, 2] < -0.72) & (low > p.zb + 0.3)
+    area = m.area_faces[bad].sum()
+    print(f"print   downward faces over 45 deg above the bed: {area:.0f} mm2 (foot pockets, plug docks)")
     print("ALL CHECKS PASSED" if ok else "CHECK FAILED")
     raise SystemExit(0 if ok else 1)
+
+
+def _mesh(part):
+    with tempfile.TemporaryDirectory() as d:
+        m = stl_mesh(part, Path(d) / "m.stl", 0.05)
+    return m.vertices, m.faces
 
 
 if __name__ == "__main__":
