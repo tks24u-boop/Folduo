@@ -27,29 +27,25 @@ def lin(hex_rgb: str) -> tuple:
 
 
 PALETTES = {
-    # Claude's warm ivory and terracotta; black TPU; space-black laptop.
+    # Claude's warm ivory and terracotta, grey felt, MacBook Air in Midnight.
     # "orange" is pre-compensated: under AgX Punchy it renders as ~#D77757 (Clawd orange).
-    "ivory": {"body": "#E9E2D3", "orange": "#BF4524", "black": "#161616", "tpu": "#232323", "laptop": "#2F2E31", "floor": "#B9B2A6"},
-    # dark body: the eyes can simply be the body colour (2 colours)
-    "charcoal": {"body": "#38383B", "orange": "#BF4524", "black": "#161616", "tpu": "#1C1C1C", "laptop": "#D5D6D8", "floor": "#CFC9BE"},
+    "ivory": {"body": "#E9E2D3", "orange": "#BF4524", "black": "#161616", "felt": "#3A3A3C", "rubber": "#1E1E1E",
+              "laptop": "#2B313B", "floor": "#B9B2A6"},
 }
 
 MATERIAL_FINISH = {  # roughness, metallic
     "body": (0.58, 0.0),
     "orange": (0.5, 0.0),
     "black": (0.5, 0.0),
-    "tpu": (0.72, 0.0),
+    "felt": (0.95, 0.0),
+    "rubber": (0.8, 0.0),
     "laptop": (0.33, 1.0),
     "floor": (0.85, 0.0),
 }
 
 SHOTS = [
-    {"name": "hero", "set": "assembled", "palette": "ivory", "cam": (470, -760, 250), "target": (0, 0, 100), "lens": 58},
-    {"name": "dock", "set": "dock", "palette": "ivory", "cam": (250, -390, 215), "target": (0, 2, 18), "lens": 60},
-    {"name": "logo_closeup", "set": "dock", "palette": "ivory", "cam": (40, -260, 70), "target": (0, -50, 20), "lens": 85},
-    {"name": "exploded", "set": "exploded", "palette": "ivory", "cam": (-330, -560, 400), "target": (0, -25, 38), "lens": 55},
-    {"name": "bottom", "set": "dock", "palette": "ivory", "cam": (240, -300, 330), "target": (0, 0, 20), "lens": 55, "flip": True},
-    {"name": "hero_charcoal", "set": "assembled", "palette": "charcoal", "cam": (-470, -760, 250), "target": (0, 0, 100), "lens": 58},
+    {"name": "hero", "set": "assembled", "palette": "ivory", "cam": (470, -760, 250), "target": (0, 0, 95), "lens": 58},
+    {"name": "dock", "set": "dock", "palette": "ivory", "cam": (230, -330, 190), "target": (0, 0, 12), "lens": 60},
 ]
 
 
@@ -128,11 +124,8 @@ def render(shot: dict, asm: Path, out: Path, samples: int, scale: float) -> None
     for ob in objs:
         ob.parent = root
     root.scale = (0.001, 0.001, 0.001)
-    if shot.get("flip"):  # turn over like a page, so the engraving reads normally
-        root.rotation_euler = (0, math.pi, 0)
-        root.location = (0, 0, 0.0475)
 
-    sweep(mats["floor"], back=0.9 if not shot.get("flip") else 1.2)
+    sweep(mats["floor"], back=0.9)
 
     cam = bpy.data.cameras.new("cam")
     cam.lens = shot["lens"]
